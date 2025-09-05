@@ -2,400 +2,369 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
-<title>Reporte de Inventarios (Costo sin Impuesto)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>REPORTE DE INVENTARIO (COSTO SIN IMPUESTO)</title>
 
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+<script type="module" src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js"></script>
+<script type="module" src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js"></script>
 
 <style>
-  :root{
-    --bg1:#00416A; --bg2:#E4E5E6; --card:#fff; --ink:#0b213f; --accent:#0c6cbd;
-  }
-  *{ box-sizing:border-box; min-width:0 }
-  html,body{ height:100% }
+  :root{ --azul:#00416A; --accent:#0c6cbd }
+  *{ box-sizing:border-box }
   body{
-    font-family:'Poppins',sans-serif;
-    margin:0; padding:clamp(10px,2vw,18px);
-    color:#0b213f;
-    background:linear-gradient(to right, var(--bg1), var(--bg2));
+    margin:0; font-family:'Poppins',sans-serif; color:#0b2239;
+    background:linear-gradient(to right,#00416A,#E4E5E6);
   }
-  main{ max-width:1100px; margin:0 auto; }
-  h1{ color:white; text-align:center; margin:8px 0 16px; }
-  .panel{
-    background:rgba(255,255,255,.9); border-radius:14px;
-    padding:clamp(10px,2vw,16px); box-shadow:0 8px 20px rgba(0,0,0,.15);
-  }
-  .row{ display:flex; gap:12px; flex-wrap:wrap; align-items:end }
-  label{ font-size:13px; font-weight:600; color:#123 }
-  input,select,button{
-    font-family:inherit; font-size:15px; padding:10px 12px;
-    border-radius:10px; border:1px solid #d6dde8; background:#fff; color:#0b213f;
-  }
-  input[type="date"]{ padding:9px 10px }
-  button.boton{ background:var(--accent); color:#fff; border:none; font-weight:700; cursor:pointer }
-  button.ghost{ background:#eef4ff; color:#0c2a5e; border:1px solid #d6dde8; font-weight:600 }
-  .muted{ color:#5b6b84; font-size:13px }
-  .mt{ margin-top:12px }
-
-  .cards{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin-top:10px }
+  main{ max-width:1100px; margin:0 auto; padding:20px; color:#fff }
+  h1{ text-align:center; margin:8px 0 16px; line-height:1.15 }
   .card{
-    background:#ffffffd9; border-radius:12px; padding:12px; border:1px solid #e8edf5;
+    background:#f3f6fb; color:#0b2239; border-radius:16px; padding:16px;
+    box-shadow:0 8px 20px rgba(0,0,0,.12);
   }
-  .card b{ font-size:13px; color:#345 }
-  .stat{ font-size:22px; font-weight:800; color:#0b213f; }
+  .row{ display:flex; flex-wrap:wrap; gap:12px; align-items:center }
+  .row > *{ flex:1 1 220px }
+  input, select, button{
+    font-family:inherit; font-size:16px; padding:12px; border-radius:12px; border:none;
+    width:100%;
+  }
+  button.primary{ background:#0c6cbd; color:#fff; font-weight:700; cursor:pointer }
+  .kpi{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin-top:12px }
+  .kpi .card{ text-align:left }
+  .kpi .n{ font-size:28px; font-weight:800 }
+  .error{ color:#b00020; font-weight:700; min-height:20px }
 
-  .table-wrap{ background:var(--card); border-radius:12px; overflow:auto; border:1px solid #e8edf5 }
-  table{ width:100%; border-collapse:collapse; table-layout:auto; min-width:760px }
-  th,td{ padding:10px; border-bottom:1px solid #eef2f7; text-align:left }
-  th{ position:sticky; top:0; background:#0d3c66; color:white; z-index:1; text-align:center }
-  td{ text-align:center }
-  td.tl{ text-align:left }
-  .right{ text-align:right }
-  .warn{ color:#b36b00; font-weight:700 }
-  .err{ color:#b00020; font-weight:700 }
+  .section-title{ margin:18px 4px 8px; font-weight:800 }
+  .actions-right{ text-align:right; margin:6px 0 }
 
-  .toolbar{ display:flex; gap:8px; flex-wrap:wrap; justify-content:space-between; align-items:center; margin:10px 0 }
-  .toolbar .left,.toolbar .right{ display:flex; gap:8px; flex-wrap:wrap; align-items:center }
+  .tbl-wrap{ background:#fff; border-radius:14px; overflow:auto }
+  table{ width:100%; border-collapse:collapse; min-width:880px }
+  th, td{ padding:10px 12px; border-bottom:1px solid #e8eef6; }
+  th{ position:sticky; top:0; background:#0b4f79; color:#fff; text-align:left }
+  td.num, th.num{ text-align:right }
+  .muted{ opacity:.85 }
 
   @media (max-width:720px){
-    .cards{ grid-template-columns:1fr; }
-    table{ min-width:0 }
-    th,td{ font-size:14px }
+    .kpi{ grid-template-columns:1fr }
   }
 </style>
 </head>
 <body>
-  <main>
-    <h1>REPORTE DE INVENTARIO (COSTO SIN IMPUESTO)</h1>
+<main>
+  <h1>REPORTE DE INVENTARIO<br>(COSTO SIN IMPUESTO)</h1>
 
-    <section class="panel">
-      <div class="row">
-        <div>
-          <label>Fecha inicial</label><br>
-          <input type="date" id="desde">
-        </div>
-        <div>
-          <label>Fecha final</label><br>
-          <input type="date" id="hasta">
-        </div>
-        <div>
-          <label>Sucursal (opcional)</label><br>
-          <select id="fSucursal">
-            <option value="">— Todas —</option>
-            <option>Matriz</option><option>Provileon</option><option>Central</option><option>Osito</option>
-            <option>Bodega Principal</option><option>Bodega Abarrotes</option><option>Bodega Dulces</option>
-            <option>Zapata</option><option>Allende</option><option>Allende 2</option><option>Rio Verde</option>
-            <option>Montemorelos</option><option>Bodega 41</option>
-          </select>
-        </div>
-        <div>
-          <label>Usuario (opcional)</label><br>
-          <input type="text" id="fUsuario" placeholder="Ej. Roberto" />
-        </div>
-        <div>
-          <button class="boton" id="btnCargar">Cargar reporte</button>
-        </div>
+  <!-- Filtros -->
+  <div class="card">
+    <div class="row">
+      <div>
+        <label>Fecha inicial</label>
+        <input type="date" id="fechaIni">
       </div>
-      <div class="mt muted" id="msg"></div>
-    </section>
+      <div>
+        <label>Fecha final</label>
+        <input type="date" id="fechaFin">
+      </div>
+      <div>
+        <label>Sucursal (opcional)</label>
+        <select id="sucursal">
+          <option value="">— Todas —</option>
+          <option>Matriz</option>
+          <option>Provileon</option>
+          <option>Central</option>
+          <option>Osito</option>
+          <option>Bodega Principal</option>
+          <option>Bodega Abarrotes</option>
+          <option>Bodega Dulces</option>
+          <option>Zapata</option>
+          <option>Allende</option>
+          <option>Allende 2</option>
+          <option>Rio Verde</option>
+          <option>Montemorelos</option>
+          <option>Bodega 41</option>
+        </select>
+      </div>
+      <div>
+        <label>Usuario (opcional)</label>
+        <input type="text" id="usuario" placeholder="Ej. Roberto">
+      </div>
+      <div>
+        <label>&nbsp;</label>
+        <button class="primary" id="btnCargar">Cargar reporte</button>
+      </div>
+    </div>
+    <div id="msgError" class="error"></div>
 
-    <section class="cards">
+    <div class="kpi">
       <div class="card">
-        <b>Renglones</b>
-        <div class="stat" id="kRenglones">0</div>
+        <div class="muted">Renglones</div>
+        <div class="n" id="kpiRenglones">0</div>
       </div>
       <div class="card">
-        <b>Cantidad total</b>
-        <div class="stat" id="kCantidad">0.000</div>
+        <div class="muted">Cantidad total</div>
+        <div class="n" id="kpiCantidad">0.000</div>
       </div>
       <div class="card">
-        <b>Importe total (sin imp.)</b>
-        <div class="stat" id="kImporte">$ 0.00</div>
-      </div>
-    </section>
-
-    <div class="toolbar">
-      <div class="left">
-        <h3 style="margin:0">Detalle por usuario</h3>
-      </div>
-      <div class="right">
-        <button class="ghost" id="csvDetalle">Exportar CSV</button>
+        <div class="muted">Importe total (sin imp.)</div>
+        <div class="n" id="kpiImporte">$ 0.00</div>
       </div>
     </div>
-    <div class="table-wrap mt">
-      <table id="tblDetalle">
-        <thead>
-          <tr>
-            <th>#</th><th>Usuario</th><th>Sucursal</th><th>Código</th><th>Descripción</th>
-            <th>Cantidad</th><th>Costo Unit. (sin imp.)</th><th>Importe</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </div>
+  </div>
 
-    <div class="toolbar">
-      <div class="left">
-        <h3 style="margin:0">Concentrado por sucursal</h3>
-      </div>
-      <div class="right">
-        <button class="ghost" id="csvSuc">Exportar CSV</button>
-      </div>
-    </div>
-    <div class="table-wrap mt">
-      <table id="tblSuc">
-        <thead>
-          <tr><th>#</th><th>Sucursal</th><th>Renglones</th><th>Cantidad total</th><th>Importe total</th></tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </div>
-  </main>
+  <!-- Detalle -->
+  <div class="section-title">Detalle por usuario</div>
+  <div class="actions-right"><button id="btnCsvDetalle">Exportar CSV</button></div>
+  <div class="tbl-wrap"><table id="tblDetalle">
+    <thead>
+      <tr>
+        <th>#</th><th>Usuario</th><th>Sucursal</th><th>Código</th><th>Descripción</th>
+        <th class="num">Cantidad</th><th class="num">Costo Unit. (sin imp.)</th><th class="num">Importe</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table></div>
 
-  <!-- Firebase -->
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import {
-      getFirestore, collectionGroup, getDocs, query, where,
-      getDoc, doc
-    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+  <!-- Concentrado por sucursal -->
+  <div class="section-title">Concentrado por sucursal</div>
+  <div class="actions-right"><button id="btnCsvConc">Exportar CSV</button></div>
+  <div class="tbl-wrap"><table id="tblConc">
+    <thead>
+      <tr>
+        <th>#</th><th>Sucursal</th><th class="num">Renglones</th><th class="num">Cantidad total</th><th class="num">Importe total</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table></div>
+</main>
 
-    // === Config Firebase (mismo proyecto) ===
-    const firebaseConfig = {
-      apiKey: "AIzaSyCK5nb6u2CGRJ8AB1aPlRn54b97bdeAFeM",
-      authDomain: "inventariopv-643f1.firebaseapp.com",
-      projectId: "inventariopv-643f1",
-      storageBucket: "inventariopv-643f1.appspot.com",
-      messagingSenderId: "96242533231",
-      appId: "1:96242533231:web:aae75a18fbaf9840529e9a"
-    };
-    const app = initializeApp(firebaseConfig);
-    const db  = getFirestore(app);
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import {
+    getFirestore, collection, getDocs, getDoc, doc, query, where
+  } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-    // === Utils ===
-    const $ = (id)=>document.getElementById(id);
-    const pad2 = (n)=> String(n).padStart(2,'0');
-    const toISODate = (d)=> `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
-    const money = (n)=> (Number(n)||0).toLocaleString("es-MX",{style:"currency",currency:"MXN",minimumFractionDigits:2});
-    const fmt = (n,dec=3)=> Number(n||0).toFixed(dec);
-    const obtenerCosto = (d)=> Number(
-      d?.costoSinImpuesto ??
-      d?.costoSinImpuestos ??
-      d?.costo_sin_impuesto ??
-      d?.costo ?? 0
-    );
+  // ==== CONFIG FIREBASE (MISMO PROYECTO) ====
+  const firebaseConfig = {
+    apiKey: "AIzaSyCK5nb6u2CGRJ8AB1aPlRn54b97bdeAFeM",
+    authDomain: "inventariopv-643f1.firebaseapp.com",
+    projectId: "inventariopv-643f1",
+    storageBucket: "inventariopv-643f1.appspot.com",
+    messagingSenderId: "96242533231",
+    appId: "1:96242533231:web:aae75a18fbaf9840529e9a"
+  };
+  const app = initializeApp(firebaseConfig);
+  const db  = getFirestore(app);
 
-    // === Default rango: hoy ===
-    const hoy = new Date();
-    $("desde").value = toISODate(hoy);
-    $("hasta").value = toISODate(hoy);
+  // ==== UTIL ====
+  const $ = (id)=>document.getElementById(id);
+  const fmtQty = (n)=> (Number(n||0)).toFixed(3);
+  const fmtMoney = (n)=> new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN',minimumFractionDigits:2}).format(Number(n||0));
 
-    // === Estado en memoria para CSV ===
-    let lastDetalle = [];
-    let lastSuc = [];
+  // default: hoy
+  const today = new Date();
+  const pad2 = n=>String(n).padStart(2,'0');
+  const ymd = (d)=> `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
+  $("fechaIni").value = ymd(today);
+  $("fechaFin").value = ymd(today);
 
-    // === Cargar reporte ===
-    $("btnCargar").addEventListener("click", async ()=>{
-      const desdeStr = $("desde").value;
-      const hastaStr = $("hasta").value;
-      if(!desdeStr || !hastaStr){ alert("Selecciona fecha inicial y final"); return; }
+  let cacheProducto = new Map(); // codigo -> {concepto, costoSinImpuesto}
 
-      // Epoch rango (00:00:00 a 23:59:59)
-      const d1 = new Date(desdeStr+"T00:00:00");
-      const d2 = new Date(hastaStr+"T23:59:59");
-      const from = d1.getTime();
-      const to   = d2.getTime();
+  async function getProducto(codigo){
+    if(cacheProducto.has(codigo)) return cacheProducto.get(codigo);
+    const ref = doc(db,"productos", String(codigo));
+    const snap = await getDoc(ref);
+    const data = snap.exists()? snap.data() : {};
+    const obj = { concepto: data.concepto || "(Sin descripción)", costo: Number(
+      data?.costoSinImpuesto ?? data?.costoSinImpuestos ?? data?.costo_sin_impuesto ?? data?.costo ?? 0
+    )};
+    cacheProducto.set(codigo, obj);
+    return obj;
+  }
 
-      const sucFilter = $("fSucursal").value.trim();
-      const usrFilter = $("fUsuario").value.trim().toLowerCase();
+  function rangoEpochMs(fechaIniStr, fechaFinStr){
+    const ini = new Date(fechaIniStr+"T00:00:00");
+    const fin = new Date(fechaFinStr+"T23:59:59");
+    return { ini: ini.getTime(), fin: fin.getTime() };
+  }
 
-      const msg = $("msg");
-      msg.textContent = "Cargando escaneos…";
-      try{
-        // 1) Traer escaneos (collectionGroup en todo el arbol)
-        // Para evitar índices compuestos, solo filtramos por fecha aquí:
-        const cg = collectionGroup(db, "escaneos");
-        const qy = query(cg,
-          where("epochMs", ">=", from),
-          where("epochMs", "<=", to)
-        );
-        const snap = await getDocs(qy);
+  async function cargarUsuariosDeSucursal(sucursal){
+    // inventarios/{sucursal}/usuarios/*
+    const col = collection(db,"inventarios",sucursal,"usuarios");
+    const snap = await getDocs(col);
+    return snap.docs.map(d=> d.id);
+  }
 
-        // 2) Filtrado adicional en memoria por sucursal/usuario (si se pidió)
-        const filas = [];
-        snap.forEach(d=>{
-          const r = d.data();
-          if(sucFilter && r.sucursal !== sucFilter) return;
-          if(usrFilter && String(r.usuario||"").toLowerCase() !== usrFilter) return;
-          filas.push({id:d.id, ...r});
-        });
+  async function queryEscaneos(sucursal, usuario, msIni, msFin){
+    // inventarios/{sucursal}/usuarios/{usuario}/escaneos
+    const col = collection(db, "inventarios", sucursal, "usuarios", usuario, "escaneos");
+    // Se filtra por epochMs (se necesita índice compuesto si agregas otros where)
+    const qy  = query(col, where("epochMs", ">=", msIni), where("epochMs", "<=", msFin));
+    const snap = await getDocs(qy);
+    return snap.docs.map(d=> ({ id:d.id, ...d.data(), sucursal, usuario }));
+  }
 
-        if(!filas.length){
-          msg.innerHTML = "Sin resultados en el rango/filtrado seleccionado.";
-          pintaResumen(0,0,0);
-          pintaDetalle([]);
-          pintaSuc([]);
-          return;
-        }
+  function limpiarTablas(){
+    $("tblDetalle").querySelector("tbody").innerHTML = "";
+    $("tblConc").querySelector("tbody").innerHTML = "";
+    $("kpiRenglones").textContent = "0";
+    $("kpiCantidad").textContent = "0.000";
+    $("kpiImporte").textContent  = "$ 0.00";
+  }
 
-        msg.textContent = "Cargando costos de productos…";
+  $("btnCargar").addEventListener("click", async ()=>{
+    $("msgError").textContent = "";
+    limpiarTablas();
+    cacheProducto.clear();
 
-        // 3) Traer costos de los códigos distintos
-        const codigos = [...new Set(filas.map(f=> String(f.codigo||"").trim()).filter(Boolean))];
-        const costosMap = Object.create(null);
+    const fechaIni = $("fechaIni").value;
+    const fechaFin = $("fechaFin").value;
+    const sucursal = $("sucursal").value.trim();   // vacío = todas
+    const usuario  = $("usuario").value.trim();    // vacío = todos
 
-        // Busca cada producto por ID (doc id == código principal)
-        await Promise.all(codigos.map(async (code)=>{
-          try{
-            const pr = await getDoc(doc(db,"productos", code));
-            if(pr.exists()){
-              const d = pr.data();
-              costosMap[code] = obtenerCosto(d);
-            }else{
-              costosMap[code] = 0;
-            }
-          }catch{
-            costosMap[code] = 0;
-          }
-        }));
+    if(!fechaIni || !fechaFin){
+      $("msgError").textContent = "Selecciona fecha inicial y final.";
+      return;
+    }
+    const {ini, fin} = rangoEpochMs(fechaIni, fechaFin);
 
-        msg.textContent = "Armando tablas…";
-
-        // 4) Agregar costo/importe a cada fila
-        const filasCosteadas = filas.map(f=>{
-          const cu = Number(costosMap[f.codigo] || 0);
-          const imp = Number(f.cantidad||0) * cu;
-          return {...f, costoUnit: cu, importe: imp};
-        });
-
-        // 5) Detalle por usuario (agregado por usuario+sucursal+código)
-        const key = (r)=> `${r.usuario}||${r.sucursal}||${r.codigo}`;
-        const mapDet = new Map();
-        for(const r of filasCosteadas){
-          const k = key(r);
-          const prev = mapDet.get(k) || { usuario:r.usuario, sucursal:r.sucursal, codigo:r.codigo, descripcion:r.descripcion, cantidad:0, costoUnit:r.costoUnit };
-          prev.cantidad += Number(r.cantidad||0);
-          // Si costo viene 0 y luego aparece >0, conservamos el mayor
-          if((prev.costoUnit||0) === 0 && r.costoUnit>0) prev.costoUnit = r.costoUnit;
-          mapDet.set(k, prev);
-        }
-        const detalle = Array.from(mapDet.values())
-          .map(x=> ({...x, importe: x.cantidad * (x.costoUnit||0)}))
-          .sort((a,b)=> (String(a.usuario).localeCompare(String(b.usuario)) || String(a.sucursal).localeCompare(String(b.sucursal)) || String(a.descripcion).localeCompare(String(b.descripcion)) ));
-
-        // 6) Concentrado por sucursal
-        const mapSuc = new Map();
-        for(const r of detalle){
-          const s = r.sucursal||"(Sin sucursal)";
-          const prev = mapSuc.get(s) || { sucursal:s, renglones:0, cantidad:0, importe:0 };
-          prev.renglones += 1;
-          prev.cantidad  += Number(r.cantidad||0);
-          prev.importe   += Number(r.importe||0);
-          mapSuc.set(s, prev);
-        }
-        const sucRows = Array.from(mapSuc.values())
-          .sort((a,b)=> a.sucursal.localeCompare(b.sucursal));
-
-        // 7) Totales
-        const totalR = detalle.length;
-        const totalC = detalle.reduce((s,x)=> s + Number(x.cantidad||0), 0);
-        const totalI = detalle.reduce((s,x)=> s + Number(x.importe||0), 0);
-
-        // 8) Pintar
-        pintaResumen(totalR, totalC, totalI);
-        pintaDetalle(detalle);
-        pintaSuc(sucRows);
-
-        lastDetalle = detalle;
-        lastSuc = sucRows;
-        msg.textContent = `Listo. Filas (crudas) leídas: ${filas.length} | Partidas (agrupadas): ${detalle.length}`;
-      }catch(e){
-        console.error(e);
-        msg.innerHTML = `<span class="err">Error al generar reporte.</span>`;
+    try{
+      let sucursales = [];
+      if(sucursal){ sucursales = [sucursal]; }
+      else{
+        // Si no especificas, toma TODAS las sucursales donde existan documentos “inventarios/*/usuarios”
+        // (lista básica – agrega las que usas)
+        sucursales = ["Matriz","Provileon","Central","Osito","Bodega Principal","Bodega Abarrotes","Bodega Dulces","Zapata","Allende","Allende 2","Rio Verde","Montemorelos","Bodega 41"];
       }
-    });
 
-    // === Pintado de tablas y KPIs
-    function pintaResumen(renglones, cantidad, importe){
-      $("kRenglones").textContent = renglones.toLocaleString();
-      $("kCantidad").textContent  = fmt(cantidad,3);
-      $("kImporte").textContent   = money(importe);
-    }
+      const detalle = [];                 // filas para tabla detalle
+      const conc   = new Map();           // sucursal -> {renglones, cantidad, importe}
 
-    function pintaDetalle(rows){
+      for(const suc of sucursales){
+        // usuarios de esta sucursal
+        let usuarios = [];
+        if(usuario){ usuarios = [usuario]; }
+        else{
+          try{
+            usuarios = await cargarUsuariosDeSucursal(suc);
+          }catch(e){
+            // si la sucursal no existe, continúa
+            continue;
+          }
+        }
+
+        for(const u of usuarios){
+          const filas = await queryEscaneos(suc, u, ini, fin);
+          for(const f of filas){
+            const prod = await getProducto(f.codigo);
+            const costo = Number(prod.costo || 0);
+            const importe = costo * Number(f.cantidad||0);
+
+            detalle.push({
+              usuario: u,
+              sucursal: suc,
+              codigo: f.codigo || "",
+              descripcion: prod.concepto || f.descripcion || "",
+              cantidad: Number(f.cantidad||0),
+              costo,
+              importe
+            });
+
+            const agg = conc.get(suc) || { renglones:0, cantidad:0, importe:0 };
+            agg.renglones += 1;
+            agg.cantidad  += Number(f.cantidad||0);
+            agg.importe   += importe;
+            conc.set(suc, agg);
+          }
+        }
+      }
+
+      // Render detalle
       const tb = $("tblDetalle").querySelector("tbody");
-      if(!rows.length){ tb.innerHTML = `<tr><td colspan="8">Sin datos</td></tr>`; return; }
-      tb.innerHTML = rows.map((r,i)=>`
-        <tr>
-          <td>${i+1}</td>
-          <td class="tl">${r.usuario||""}</td>
-          <td class="tl">${r.sucursal||""}</td>
-          <td>${r.codigo||""}</td>
-          <td class="tl">${r.descripcion||""}</td>
-          <td>${fmt(r.cantidad,3)}</td>
-          <td class="${(r.costoUnit||0)?'':'warn'}">${(r.costoUnit||0)? money(r.costoUnit): '—'}</td>
-          <td class="right">${money(r.importe||0)}</td>
-        </tr>
-      `).join("");
+      let i=0, totalCant=0, totalImp=0;
+      detalle.sort((a,b)=> (a.sucursal||"").localeCompare(b.sucursal||"") || (a.usuario||"").localeCompare(b.usuario||""));
+      for(const r of detalle){
+        totalCant += r.cantidad;
+        totalImp  += r.importe;
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${++i}</td>
+          <td>${r.usuario}</td>
+          <td>${r.sucursal}</td>
+          <td>${r.codigo}</td>
+          <td>${r.descripcion}</td>
+          <td class="num">${fmtQty(r.cantidad)}</td>
+          <td class="num">${fmtMoney(r.costo)}</td>
+          <td class="num">${fmtMoney(r.importe)}</td>
+        `;
+        tb.appendChild(tr);
+      }
+
+      // KPIs
+      $("kpiRenglones").textContent = String(detalle.length);
+      $("kpiCantidad").textContent  = fmtQty(totalCant);
+      $("kpiImporte").textContent   = fmtMoney(totalImp);
+
+      // Render concentrado
+      const tbc = $("tblConc").querySelector("tbody");
+      let j=0;
+      const concRows = Array.from(conc.entries()).map(([s, v])=>({sucursal:s, ...v}));
+      concRows.sort((a,b)=> (a.sucursal||"").localeCompare(b.sucursal||""));
+      for(const r of concRows){
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${++j}</td>
+          <td>${r.sucursal}</td>
+          <td class="num">${r.renglones}</td>
+          <td class="num">${fmtQty(r.cantidad)}</td>
+          <td class="num">${fmtMoney(r.importe)}</td>
+        `;
+        tbc.appendChild(tr);
+      }
+
+      if(detalle.length===0){
+        $("msgError").textContent = "No hay registros para ese filtro.";
+      }
+
+      // Guarda los últimos datos para CSV
+      window.__detalle = detalle;
+      window.__conc    = concRows;
+
+    }catch(err){
+      console.error(err);
+      $("msgError").textContent = "Error al generar reporte.";
     }
+  });
 
-    function pintaSuc(rows){
-      const tb = $("tblSuc").querySelector("tbody");
-      if(!rows.length){ tb.innerHTML = `<tr><td colspan="5">Sin datos</td></tr>`; return; }
-      tb.innerHTML = rows.map((r,i)=>`
-        <tr>
-          <td>${i+1}</td>
-          <td class="tl">${r.sucursal}</td>
-          <td>${r.renglones.toLocaleString()}</td>
-          <td>${fmt(r.cantidad,3)}</td>
-          <td class="right">${money(r.importe)}</td>
-        </tr>
-      `).join("");
-    }
+  // ===== Exportar CSV
+  function toCSV(rows, headers){
+    const escape = (v)=> `"${String(v??"").replace(/"/g,'""')}"`;
+    const head = headers.map(h=>escape(h)).join(",");
+    const body = rows.map(r=> headers.map(h=> escape(r[h])).join(",")).join("\n");
+    return head + "\n" + body;
+  }
+  function download(filename, text){
+    const blob = new Blob([text], {type:"text/csv;charset=utf-8;"});
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+  }
 
-    // === CSV ===
-    function arrToCSV(arr, headers){
-      const esc = (v)=> `"${String(v??'').replaceAll(`"`,`""`)}"`;
-      const head = headers.map(h=>esc(h.text)).join(",");
-      const lines = arr.map(r=> headers.map(h=> esc(h.get(r))).join(","));
-      return [head, ...lines].join("\n");
-    }
-    function download(name, text){
-      const blob = new Blob([text], {type:"text/csv;charset=utf-8;"});
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = name;
-      document.body.appendChild(a); a.click();
-      setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 0);
-    }
+  $("btnCsvDetalle").addEventListener("click", ()=>{
+    const rows = (window.__detalle||[]).map(r=>({
+      "Usuario":r.usuario, "Sucursal":r.sucursal, "Código":r.codigo, "Descripción":r.descripcion,
+      "Cantidad":fmtQty(r.cantidad), "Costo Unit. (sin imp.)":r.costo, "Importe":r.importe
+    }));
+    const csv = toCSV(rows, ["Usuario","Sucursal","Código","Descripción","Cantidad","Costo Unit. (sin imp.)","Importe"]);
+    download("detalle_inventario.csv", csv);
+  });
 
-    $("csvDetalle").addEventListener("click", ()=>{
-      if(!lastDetalle.length){ alert("No hay datos"); return; }
-      const csv = arrToCSV(lastDetalle, [
-        {text:"#", get:(_r,i,arr)=> (arr.indexOf(_r)+1)},
-        {text:"Usuario", get:r=> r.usuario||""},
-        {text:"Sucursal", get:r=> r.sucursal||""},
-        {text:"Código", get:r=> r.codigo||""},
-        {text:"Descripción", get:r=> r.descripcion||""},
-        {text:"Cantidad", get:r=> fmt(r.cantidad,3)},
-        {text:"CostoUnit", get:r=> r.costoUnit||0},
-        {text:"Importe", get:r=> r.importe||0},
-      ]);
-      download(`detalle-usuarios-${$("desde").value}_a_${$("hasta").value}.csv`, csv);
-    });
-
-    $("csvSuc").addEventListener("click", ()=>{
-      if(!lastSuc.length){ alert("No hay datos"); return; }
-      const csv = arrToCSV(lastSuc, [
-        {text:"#", get:(_r,i,arr)=> (arr.indexOf(_r)+1)},
-        {text:"Sucursal", get:r=> r.sucursal},
-        {text:"Renglones", get:r=> r.renglones},
-        {text:"Cantidad", get:r=> r.cantidad},
-        {text:"Importe", get:r=> r.importe},
-      ]);
-      download(`concentrado-sucursales-${$("desde").value}_a_${$("hasta").value}.csv`, csv);
-    });
-
-  </script>
+  $("btnCsvConc").addEventListener("click", ()=>{
+    const rows = (window.__conc||[]).map(r=>({
+      "Sucursal":r.sucursal, "Renglones":r.renglones, "Cantidad total":fmtQty(r.cantidad), "Importe total":r.importe
+    }));
+    const csv = toCSV(rows, ["Sucursal","Renglones","Cantidad total","Importe total"]);
+    download("concentrado_sucursal.csv", csv);
+  });
+</script>
 </body>
 </html>
