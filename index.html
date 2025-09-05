@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<title>Reporte de Inventarios (Costo sin Impuesto)</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    --bg1:#00416A; --bg2:#E4E5E6; --card:#fff; --ink:#0b213f; --accent:#0c6cbd;
+  }
+  *{ box-sizing:border-box; min-width:0 }
+  html,body{ height:100% }
+  body{
+    font-family:'Poppins',sans-serif;
+    margin:0; padding:clamp(10px,2vw,18px);
+    color:#0b213f;
+    background:linear-gradient(to right, var(--bg1), var(--bg2));
+  }
+  main{ max-width:1100px; margin:0 auto; }
+  h1{ color:white; text-align:center; margin:8px 0 16px; }
+  .panel{
+    background:rgba(255,255,255,.9); border-radius:14px;
+    padding:clamp(10px,2vw,16px); box-shadow:0 8px 20px rgba(0,0,0,.15);
+  }
+  .row{ display:flex; gap:12px; flex-wrap:wrap; align-items:end }
+  label{ font-size:13px; font-weight:600; color:#123 }
+  input,select,button{
+    font-family:inherit; font-size:15px; padding:10px 12px;
+    border-radius:10px; border:1px solid #d6dde8; background:#fff; color:#0b213f;
+  }
+  input[type="date"]{ padding:9px 10px }
+  button.boton{ background:var(--accent); color:#fff; border:none; font-weight:700; cursor:pointer }
+  button.ghost{ background:#eef4ff; color:#0c2a5e; border:1px solid #d6dde8; font-weight:600 }
+  .muted{ color:#5b6b84; font-size:13px }
+  .mt{ margin-top:12px }
+
+  .cards{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin-top:10px }
+  .card{
+    background:#ffffffd9; border-radius:12px; padding:12px; border:1px solid #e8edf5;
+  }
+  .card b{ font-size:13px; color:#345 }
+  .stat{ font-size:22px; font-weight:800; color:#0b213f; }
+
+  .table-wrap{ background:var(--card); border-radius:12px; overflow:auto; border:1px solid #e8edf5 }
+  table{ width:100%; border-collapse:collapse; table-layout:auto; min-width:760px }
+  th,td{ padding:10px; border-bottom:1px solid #eef2f7; text-align:left }
+  th{ position:sticky; top:0; background:#0d3c66; color:white; z-index:1; text-align:center }
+  td{ text-align:center }
+  td.tl{ text-align:left }
+  .right{ text-align:right }
+  .warn{ color:#b36b00; font-weight:700 }
+  .err{ color:#b00020; font-weight:700 }
+
+  .toolbar{ display:flex; gap:8px; flex-wrap:wrap; justify-content:space-between; align-items:center; margin:10px 0 }
+  .toolbar .left,.toolbar .right{ display:flex; gap:8px; flex-wrap:wrap; align-items:center }
+
+  @media (max-width:720px){
+    .cards{ grid-template-columns:1fr; }
+    table{ min-width:0 }
+    th,td{ font-size:14px }
+  }
+</style>
+</head>
+<body>
+  <main>
+    <h1>REPORTE DE INVENTARIO (COSTO SIN IMPUESTO)</h1>
+
+    <section class="panel">
+      <div class="row">
+        <div>
+          <label>Fecha inicial</label><br>
+          <input type="date" id="desde">
+        </div>
+        <div>
+          <label>Fecha final</label><br>
+          <input type="date" id="hasta">
+        </div>
+        <div>
+          <label>Sucursal (opcional)</label><br>
+          <select id="fSucursal">
+            <option value="">— Todas —</option>
+            <option>Matriz</option><option>Provileon</option><option>Central</option><option>Osito</option>
+            <option>Bodega Principal</option><option>Bodega Abarrotes</option><option>Bodega Dulces</option>
+            <option>Zapata</option><option>Allende</option><option>Allende 2</option><option>Rio Verde</option>
+            <option>Montemorelos</option><option>Bodega 41</option>
+          </select>
+        </div>
+        <div>
+          <label>Usuario (opcional)</label><br>
+          <input type="text" id="fUsuario" placeholder="Ej. Roberto" />
+        </div>
+        <div>
+          <button class="boton" id="btnCargar">Cargar reporte</button>
+        </div>
+      </div>
+      <div class="mt muted" id="msg"></div>
+    </section>
+
+    <section class="cards">
+      <div class="card">
+        <b>Renglones</b>
+        <div class="stat" id="kRenglones">0</div>
+      </div>
+      <div class="card">
+        <b>Cantidad total</b>
+        <div class="stat" id="kCantidad">0.000</div>
+      </div>
+      <div class="card">
+        <b>Importe total (sin imp.)</b>
+        <div class="stat" id="kImporte">$ 0.00</div>
+      </div>
+    </section>
+
+    <div class="toolbar">
+      <div class="left">
+        <h3 style="margin:0">Detalle por usuario</h3>
+      </div>
+      <div class="right">
+        <button class="ghost" id="csvDetalle">Exportar CSV</button>
+      </div>
+    </div>
+    <div class="table-wrap mt">
+      <table id="tblDetalle">
+        <thead>
+          <tr>
+            <th>#</th><th>Usuario</th><th>Sucursal</th><th>Código</th><th>Descripción</th>
+            <th>Cantidad</th><th>Costo Unit. (sin imp.)</th><th>Importe</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div class="toolbar">
+      <div class="left">
+        <h3 style="margin:0">Concentrado por sucursal</h3>
+      </div>
+      <div class="right">
+        <button class="ghost" id="csvSuc">Exportar CSV</button>
+      </div>
+    </div>
+    <div class="table-wrap mt">
+      <table id="tblSuc">
+        <thead>
+          <tr><th>#</th><th>Sucursal</th><th>Renglones</th><th>Cantidad total</th><th>Importe total</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </main>
+
+  <!-- Firebase -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import {
+      getFirestore, collectionGroup, getDocs, query, where,
+      getDoc, doc
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    // === Config Firebase (mismo proyecto) ===
+    const firebaseConfig = {
+      apiKey: "AIzaSyCK5nb6u2CGRJ8AB1aPlRn54b97bdeAFeM",
+      authDomain: "inventariopv-643f1.firebaseapp.com",
+      projectId: "inventariopv-643f1",
+      storageBucket: "inventariopv-643f1.appspot.com",
+      messagingSenderId: "96242533231",
+      appId: "1:96242533231:web:aae75a18fbaf9840529e9a"
+    };
+    const app = initializeApp(firebaseConfig);
+    const db  = getFirestore(app);
+
+    // === Utils ===
+    const $ = (id)=>document.getElementById(id);
+    const pad2 = (n)=> String(n).padStart(2,'0');
+    const toISODate = (d)=> `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
+    const money = (n)=> (Number(n)||0).toLocaleString("es-MX",{style:"currency",currency:"MXN",minimumFractionDigits:2});
+    const fmt = (n,dec=3)=> Number(n||0).toFixed(dec);
+    const obtenerCosto = (d)=> Number(
+      d?.costoSinImpuesto ??
+      d?.costoSinImpuestos ??
+      d?.costo_sin_impuesto ??
+      d?.costo ?? 0
+    );
+
+    // === Default rango: hoy ===
+    const hoy = new Date();
+    $("desde").value = toISODate(hoy);
+    $("hasta").value = toISODate(hoy);
+
+    // === Estado en memoria para CSV ===
+    let lastDetalle = [];
+    let lastSuc = [];
+
+    // === Cargar reporte ===
+    $("btnCargar").addEventListener("click", async ()=>{
+      const desdeStr = $("desde").value;
+      const hastaStr = $("hasta").value;
+      if(!desdeStr || !hastaStr){ alert("Selecciona fecha inicial y final"); return; }
+
+      // Epoch rango (00:00:00 a 23:59:59)
+      const d1 = new Date(desdeStr+"T00:00:00");
+      const d2 = new Date(hastaStr+"T23:59:59");
+      const from = d1.getTime();
+      const to   = d2.getTime();
+
+      const sucFilter = $("fSucursal").value.trim();
+      const usrFilter = $("fUsuario").value.trim().toLowerCase();
+
+      const msg = $("msg");
+      msg.textContent = "Cargando escaneos…";
+      try{
+        // 1) Traer escaneos (collectionGroup en todo el arbol)
+        // Para evitar índices compuestos, solo filtramos por fecha aquí:
+        const cg = collectionGroup(db, "escaneos");
+        const qy = query(cg,
+          where("epochMs", ">=", from),
+          where("epochMs", "<=", to)
+        );
+        const snap = await getDocs(qy);
+
+        // 2) Filtrado adicional en memoria por sucursal/usuario (si se pidió)
+        const filas = [];
+        snap.forEach(d=>{
+          const r = d.data();
+          if(sucFilter && r.sucursal !== sucFilter) return;
+          if(usrFilter && String(r.usuario||"").toLowerCase() !== usrFilter) return;
+          filas.push({id:d.id, ...r});
+        });
+
+        if(!filas.length){
+          msg.innerHTML = "Sin resultados en el rango/filtrado seleccionado.";
+          pintaResumen(0,0,0);
+          pintaDetalle([]);
+          pintaSuc([]);
+          return;
+        }
+
+        msg.textContent = "Cargando costos de productos…";
+
+        // 3) Traer costos de los códigos distintos
+        const codigos = [...new Set(filas.map(f=> String(f.codigo||"").trim()).filter(Boolean))];
+        const costosMap = Object.create(null);
+
+        // Busca cada producto por ID (doc id == código principal)
+        await Promise.all(codigos.map(async (code)=>{
+          try{
+            const pr = await getDoc(doc(db,"productos", code));
+            if(pr.exists()){
+              const d = pr.data();
+              costosMap[code] = obtenerCosto(d);
+            }else{
+              costosMap[code] = 0;
+            }
+          }catch{
+            costosMap[code] = 0;
+          }
+        }));
+
+        msg.textContent = "Armando tablas…";
+
+        // 4) Agregar costo/importe a cada fila
+        const filasCosteadas = filas.map(f=>{
+          const cu = Number(costosMap[f.codigo] || 0);
+          const imp = Number(f.cantidad||0) * cu;
+          return {...f, costoUnit: cu, importe: imp};
+        });
+
+        // 5) Detalle por usuario (agregado por usuario+sucursal+código)
+        const key = (r)=> `${r.usuario}||${r.sucursal}||${r.codigo}`;
+        const mapDet = new Map();
+        for(const r of filasCosteadas){
+          const k = key(r);
+          const prev = mapDet.get(k) || { usuario:r.usuario, sucursal:r.sucursal, codigo:r.codigo, descripcion:r.descripcion, cantidad:0, costoUnit:r.costoUnit };
+          prev.cantidad += Number(r.cantidad||0);
+          // Si costo viene 0 y luego aparece >0, conservamos el mayor
+          if((prev.costoUnit||0) === 0 && r.costoUnit>0) prev.costoUnit = r.costoUnit;
+          mapDet.set(k, prev);
+        }
+        const detalle = Array.from(mapDet.values())
+          .map(x=> ({...x, importe: x.cantidad * (x.costoUnit||0)}))
+          .sort((a,b)=> (String(a.usuario).localeCompare(String(b.usuario)) || String(a.sucursal).localeCompare(String(b.sucursal)) || String(a.descripcion).localeCompare(String(b.descripcion)) ));
+
+        // 6) Concentrado por sucursal
+        const mapSuc = new Map();
+        for(const r of detalle){
+          const s = r.sucursal||"(Sin sucursal)";
+          const prev = mapSuc.get(s) || { sucursal:s, renglones:0, cantidad:0, importe:0 };
+          prev.renglones += 1;
+          prev.cantidad  += Number(r.cantidad||0);
+          prev.importe   += Number(r.importe||0);
+          mapSuc.set(s, prev);
+        }
+        const sucRows = Array.from(mapSuc.values())
+          .sort((a,b)=> a.sucursal.localeCompare(b.sucursal));
+
+        // 7) Totales
+        const totalR = detalle.length;
+        const totalC = detalle.reduce((s,x)=> s + Number(x.cantidad||0), 0);
+        const totalI = detalle.reduce((s,x)=> s + Number(x.importe||0), 0);
+
+        // 8) Pintar
+        pintaResumen(totalR, totalC, totalI);
+        pintaDetalle(detalle);
+        pintaSuc(sucRows);
+
+        lastDetalle = detalle;
+        lastSuc = sucRows;
+        msg.textContent = `Listo. Filas (crudas) leídas: ${filas.length} | Partidas (agrupadas): ${detalle.length}`;
+      }catch(e){
+        console.error(e);
+        msg.innerHTML = `<span class="err">Error al generar reporte.</span>`;
+      }
+    });
+
+    // === Pintado de tablas y KPIs
+    function pintaResumen(renglones, cantidad, importe){
+      $("kRenglones").textContent = renglones.toLocaleString();
+      $("kCantidad").textContent  = fmt(cantidad,3);
+      $("kImporte").textContent   = money(importe);
+    }
+
+    function pintaDetalle(rows){
+      const tb = $("tblDetalle").querySelector("tbody");
+      if(!rows.length){ tb.innerHTML = `<tr><td colspan="8">Sin datos</td></tr>`; return; }
+      tb.innerHTML = rows.map((r,i)=>`
+        <tr>
+          <td>${i+1}</td>
+          <td class="tl">${r.usuario||""}</td>
+          <td class="tl">${r.sucursal||""}</td>
+          <td>${r.codigo||""}</td>
+          <td class="tl">${r.descripcion||""}</td>
+          <td>${fmt(r.cantidad,3)}</td>
+          <td class="${(r.costoUnit||0)?'':'warn'}">${(r.costoUnit||0)? money(r.costoUnit): '—'}</td>
+          <td class="right">${money(r.importe||0)}</td>
+        </tr>
+      `).join("");
+    }
+
+    function pintaSuc(rows){
+      const tb = $("tblSuc").querySelector("tbody");
+      if(!rows.length){ tb.innerHTML = `<tr><td colspan="5">Sin datos</td></tr>`; return; }
+      tb.innerHTML = rows.map((r,i)=>`
+        <tr>
+          <td>${i+1}</td>
+          <td class="tl">${r.sucursal}</td>
+          <td>${r.renglones.toLocaleString()}</td>
+          <td>${fmt(r.cantidad,3)}</td>
+          <td class="right">${money(r.importe)}</td>
+        </tr>
+      `).join("");
+    }
+
+    // === CSV ===
+    function arrToCSV(arr, headers){
+      const esc = (v)=> `"${String(v??'').replaceAll(`"`,`""`)}"`;
+      const head = headers.map(h=>esc(h.text)).join(",");
+      const lines = arr.map(r=> headers.map(h=> esc(h.get(r))).join(","));
+      return [head, ...lines].join("\n");
+    }
+    function download(name, text){
+      const blob = new Blob([text], {type:"text/csv;charset=utf-8;"});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = name;
+      document.body.appendChild(a); a.click();
+      setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 0);
+    }
+
+    $("csvDetalle").addEventListener("click", ()=>{
+      if(!lastDetalle.length){ alert("No hay datos"); return; }
+      const csv = arrToCSV(lastDetalle, [
+        {text:"#", get:(_r,i,arr)=> (arr.indexOf(_r)+1)},
+        {text:"Usuario", get:r=> r.usuario||""},
+        {text:"Sucursal", get:r=> r.sucursal||""},
+        {text:"Código", get:r=> r.codigo||""},
+        {text:"Descripción", get:r=> r.descripcion||""},
+        {text:"Cantidad", get:r=> fmt(r.cantidad,3)},
+        {text:"CostoUnit", get:r=> r.costoUnit||0},
+        {text:"Importe", get:r=> r.importe||0},
+      ]);
+      download(`detalle-usuarios-${$("desde").value}_a_${$("hasta").value}.csv`, csv);
+    });
+
+    $("csvSuc").addEventListener("click", ()=>{
+      if(!lastSuc.length){ alert("No hay datos"); return; }
+      const csv = arrToCSV(lastSuc, [
+        {text:"#", get:(_r,i,arr)=> (arr.indexOf(_r)+1)},
+        {text:"Sucursal", get:r=> r.sucursal},
+        {text:"Renglones", get:r=> r.renglones},
+        {text:"Cantidad", get:r=> r.cantidad},
+        {text:"Importe", get:r=> r.importe},
+      ]);
+      download(`concentrado-sucursales-${$("desde").value}_a_${$("hasta").value}.csv`, csv);
+    });
+
+  </script>
+</body>
+</html>
