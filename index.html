@@ -23,7 +23,7 @@
     header h1{ margin:0 0 4px 0; line-height:1.1 }
     .card{
       background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow);
-      padding:14px; margin:0 auto; max-width:1100px;
+      padding:14px; margin:0 auto; max-width:1200px;
     }
     .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center }
     select,button{
@@ -38,7 +38,7 @@
     .kpi{ background:#f8fafc; border:1px solid #e5e7eb; border-radius:12px; padding:10px 12px; min-width:160px }
     .kpi .v{ font-size:20px; font-weight:800 }
     .tablewrap{ margin-top:12px; background:#fff; border:1px solid #e5e7eb; border-radius:12px; overflow:auto }
-    table{ width:100%; border-collapse:collapse; min-width:780px }
+    table{ width:100%; border-collapse:collapse; min-width:880px }
     th,td{ padding:10px; border-bottom:1px solid #eef2f7; text-align:center }
     th{ position:sticky; top:0; background:#00416A; color:#fff; z-index:1 }
     td.l{ text-align:left }
@@ -80,6 +80,7 @@
         <select id="vista">
           <option value="agrupado">Agrupado por producto</option>
           <option value="crudo">Partidas (crudo)</option>
+          <option value="costeado">Costeado (sin IVA)</option>
         </select>
       </div>
 
@@ -93,6 +94,7 @@
       <div class="kpi"><div class="l muted">Partidas</div><div class="v" id="kPartidas">0</div></div>
       <div class="kpi"><div class="l muted">Artículos únicos</div><div class="v" id="kUnicos">0</div></div>
       <div class="kpi"><div class="l muted">Cantidad total</div><div class="v" id="kCantidad">0.000</div></div>
+      <div class="kpi"><div class="l muted">Valor inventario</div><div class="v" id="kValor">$0.00</div></div>
       <div class="kpi"><div class="l muted">Sucursal</div><div class="v" id="kSucursal">—</div></div>
       <div class="kpi"><div class="l muted">Usuario</div><div class="v" id="kUsuario">Todos</div></div>
     </div>
@@ -112,7 +114,7 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import {
-      getFirestore, collection, getDocs
+      getFirestore, collection, getDocs, query, where, documentId
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     /* ====== CONFIG FIREBASE ====== */
@@ -133,6 +135,7 @@
     /* ====== UTIL ====== */
     const $ = (id)=>document.getElementById(id);
     const fmtDec = (n, d=3)=> Number(n||0).toFixed(d);
+    const fmtMoney = (n)=> n.toLocaleString('es-MX',{style:'currency',currency:'MXN',minimumFractionDigits:2});
 
     const selSucursal = $("sucursal");
     const selUsuario  = $("usuario");
@@ -147,25 +150,31 @@
     const kPartidas = $("kPartidas");
     const kUnicos   = $("kUnicos");
     const kCantidad = $("kCantidad");
+    const kValor    = $("kValor");
     const kSucursal = $("kSucursal");
     const kUsuario  = $("kUsuario");
 
     let datosCrudos = [];     // filas crudas (escaneos)
     let datosAgrupa = [];     // filas agrupadas por producto
+    let costCache   = new Map(); // codigo -> costoSinImpuesto (number)
     let ultimaDescarga = [];  // lo que está visible (para exportar)
 
     function setEstado(msg){ estado.textContent = msg; }
-    function limpiarTabla(){
-      thead.innerHTML=""; tbody.innerHTML="";
-    }
+    function limpiarTabla(){ thead.innerHTML=""; tbody.innerHTML=""; }
 
     function kpisDesdeCrudo(rows){
       const partidas = rows.length;
       const unicos = new Set(rows.map(r=> r.codigo || "")).size;
-      const suma = rows.reduce((a,r)=> a + Number(r.cantidad || 0), 0);
+      const sumaCant = rows.reduce((a,r)=> a + Number(r.cantidad || 0), 0);
       kPartidas.textContent = partidas;
-      kUnicos.textContent = unicos;
-      kCantidad.textContent = fmtDec(suma, 3);
+      kUnicos.textContent   = unicos;
+      kCantidad.textContent = fmtDec(sumaCant, 3);
+      // valor (si tenemos costos cargados para los códigos presentes)
+      const val = rows.reduce((acc,r)=>{
+        const c = Number(costCache.get(r.codigo) ?? 0);
+        return acc + (Number(r.cantidad||0) * c);
+      }, 0);
+      kValor.textContent = fmtMoney(val);
     }
 
     function agruparPorProducto(rows){
@@ -190,6 +199,26 @@
       return Array.from(map.values()).sort((a,b)=> (a.descripcion||"").localeCompare(b.descripcion||""));
     }
 
+    /* ====== COSTOS: fetch en lotes ====== */
+    async function cargarCostosParaCodigos(codigos){
+      const faltantes = codigos.filter(c => !costCache.has(c));
+      if(!faltantes.length) return;
+      const chunks = [];
+      for(let i=0;i<faltantes.length;i+=10) chunks.push(faltantes.slice(i, i+10)); // 'in' máx 10 ids
+      for(const batch of chunks){
+        const qCost = query(collection(db,"productos"), where(documentId(),'in', batch));
+        const snap  = await getDocs(qCost);
+        snap.forEach(d=>{
+          const data = d.data() || {};
+          const costo = Number(data.costoSinImpuesto ?? 0);
+          costCache.set(d.id, isFinite(costo) ? costo : 0);
+        });
+        // si alguno no existe, pon 0 para evitar re-consulta
+        batch.forEach(id => { if(!costCache.has(id)) costCache.set(id, 0); });
+      }
+    }
+
+    /* ====== RENDER ====== */
     function renderCrudo(rows){
       thead.innerHTML = `
         <tr>
@@ -225,29 +254,68 @@
       ultimaDescarga = rows;
     }
 
-    function render(){
-      if(selVista.value === "crudo"){
-        renderCrudo(datosCrudos);
-      }else{
-        renderAgrupado(datosAgrupa);
-      }
+    function renderCosteado(rowsAgrupa){
+      thead.innerHTML = `
+        <tr>
+          <th>#</th><th>Código</th><th>Descripción</th>
+          <th>Cantidad</th><th>Costo Unit.</th><th>Total (sin IVA)</th>
+        </tr>`;
+      let total = 0;
+      tbody.innerHTML = rowsAgrupa.map((r,i)=>{
+        const cu = Number(costCache.get(r.codigo) ?? 0);
+        const tt = cu * Number(r.cantidad || 0);
+        total += tt;
+        return `
+          <tr>
+            <td>${i+1}</td>
+            <td class="l">${r.codigo}</td>
+            <td class="l">${r.descripcion}</td>
+            <td>${fmtDec(r.cantidad,3)}</td>
+            <td>${fmtMoney(cu)}</td>
+            <td>${fmtMoney(tt)}</td>
+          </tr>`;
+      }).join("");
+      kValor.textContent = fmtMoney(total);
+      ultimaDescarga = rowsAgrupa.map(r=>({
+        ...r,
+        costoUnit: Number(costCache.get(r.codigo) ?? 0),
+        total: Number((costCache.get(r.codigo) ?? 0)) * Number(r.cantidad || 0),
+      }));
     }
 
-    // ========= PARCHE SIN ÍNDICES =========
+    async function render(){
+      if(selVista.value === "crudo"){
+        renderCrudo(datosCrudos);
+      }else if(selVista.value === "agrupado"){
+        renderAgrupado(datosAgrupa);
+      }else{ // costeado
+        // asegúrate de tener costos
+        const cods = datosAgrupa.map(x=>x.codigo).filter(Boolean);
+        setEstado("Cargando costos…");
+        await cargarCostosParaCodigos(cods);
+        setEstado("Listo");
+        renderCosteado(datosAgrupa);
+      }
+      // refresca KPIs (incluye valor si hay costos)
+      kpisDesdeCrudo(datosCrudos);
+    }
+
+    /* ========= CARGA (parche sin índices) ========= */
     async function cargar(){
       const suc = selSucursal.value.trim();
       const usr = selUsuario.value.trim();
       if(!suc){ alert("Selecciona una sucursal"); return; }
 
-      setEstado("Cargando…");
+      setEstado("Cargando escaneos…");
       limpiarTabla();
       kSucursal.textContent = suc || "—";
       kUsuario.textContent  = usr || "Todos";
+      costCache = new Map(); // limpia cache al cambiar filtro
 
       let rows = [];
 
       if(usr){
-        // Consulta directa por ruta: inventarios/{sucursal}/usuarios/{usuario}/escaneos
+        // inventarios/{sucursal}/usuarios/{usuario}/escaneos
         const col = collection(db, "inventarios", suc, "usuarios", usr, "escaneos");
         const snap = await getDocs(col);
         snap.forEach(d=>{
@@ -264,7 +332,7 @@
           });
         });
       }else{
-        // Fan-out por todos los usuarios de la lista para esa sucursal
+        // fan-out por todos los usuarios definidos
         const lotes = await Promise.all(
           USUARIOS.map(async (u)=>{
             const col = collection(db, "inventarios", suc, "usuarios", u, "escaneos");
@@ -289,13 +357,20 @@
         rows = lotes.flat();
       }
 
-      // Orden: fecha descendente para crudo
+      // Orden por fecha desc para crudo
       rows.sort((a,b)=> (b.epochMs||0) - (a.epochMs||0));
       datosCrudos = rows;
       datosAgrupa = agruparPorProducto(rows);
-      kpisDesdeCrudo(rows);
-      render();
+
+      // Si ya está seleccionada la vista costeada, precarga costos de una vez
+      if(selVista.value === "costeado"){
+        const cods = datosAgrupa.map(x=>x.codigo).filter(Boolean);
+        setEstado("Cargando costos…");
+        await cargarCostosParaCodigos(cods);
+      }
+
       setEstado(rows.length ? `Listo: ${rows.length} partidas` : "Sin resultados");
+      render();
     }
 
     // Exportar lo visible a Excel
@@ -310,7 +385,8 @@
           data.push([i+1, r.codigo, r.descripcion, Number(r.cantidad||0), r.fecha, r.usuario, r.folioSesion]);
         });
         ws = XLSX.utils.aoa_to_sheet(data);
-      }else{
+
+      }else if(selVista.value === "agrupado"){
         const data = [
           ["#", "Código", "Descripción", "Cantidad Total", "Partidas", "Última fecha"]
         ];
@@ -318,12 +394,22 @@
           data.push([i+1, r.codigo, r.descripcion, Number(r.cantidad||0), r.partidas, r.ultimaFecha]);
         });
         ws = XLSX.utils.aoa_to_sheet(data);
+
+      }else{ // costeado
+        const data = [
+          ["#", "Código", "Descripción", "Cantidad", "Costo Unit. (sin IVA)", "Total (sin IVA)"]
+        ];
+        ultimaDescarga.forEach((r,i)=>{
+          data.push([i+1, r.codigo, r.descripcion, Number(r.cantidad||0), Number(r.costoUnit||0), Number(r.total||0)]);
+        });
+        ws = XLSX.utils.aoa_to_sheet(data);
       }
+
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Inventario");
+      XLSX.utils.book_append_sheet(wb, ws, selVista.value === "costeado" ? "Costeado" : "Inventario");
       const suc = selSucursal.value || "Sucursal";
       const usr = selUsuario.value || "Todos";
-      XLSX.writeFile(wb, `Inventario_${suc}_${usr}_${new Date().toISOString().slice(0,10)}.xlsx`);
+      XLSX.writeFile(wb, `Inventario_${selVista.value}_${suc}_${usr}_${new Date().toISOString().slice(0,10)}.xlsx`);
     });
 
     btnCargar.addEventListener("click", cargar);
