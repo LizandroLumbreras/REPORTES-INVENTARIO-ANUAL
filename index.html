@@ -1,370 +1,309 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>REPORTE DE INVENTARIO (COSTO SIN IMPUESTO)</title>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+  <title>Visor – Inventarios Escaneados</title>
 
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
-<script type="module" src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js"></script>
-<script type="module" src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet"/>
+  <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
 
-<style>
-  :root{ --azul:#00416A; --accent:#0c6cbd }
-  *{ box-sizing:border-box }
-  body{
-    margin:0; font-family:'Poppins',sans-serif; color:#0b2239;
-    background:linear-gradient(to right,#00416A,#E4E5E6);
-  }
-  main{ max-width:1100px; margin:0 auto; padding:20px; color:#fff }
-  h1{ text-align:center; margin:8px 0 16px; line-height:1.15 }
-  .card{
-    background:#f3f6fb; color:#0b2239; border-radius:16px; padding:16px;
-    box-shadow:0 8px 20px rgba(0,0,0,.12);
-  }
-  .row{ display:flex; flex-wrap:wrap; gap:12px; align-items:center }
-  .row > *{ flex:1 1 220px }
-  input, select, button{
-    font-family:inherit; font-size:16px; padding:12px; border-radius:12px; border:none;
-    width:100%;
-  }
-  button.primary{ background:#0c6cbd; color:#fff; font-weight:700; cursor:pointer }
-  .kpi{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin-top:12px }
-  .kpi .card{ text-align:left }
-  .kpi .n{ font-size:28px; font-weight:800 }
-  .error{ color:#b00020; font-weight:700; min-height:20px }
-
-  .section-title{ margin:18px 4px 8px; font-weight:800 }
-  .actions-right{ text-align:right; margin:6px 0 }
-
-  .tbl-wrap{ background:#fff; border-radius:14px; overflow:auto }
-  table{ width:100%; border-collapse:collapse; min-width:880px }
-  th, td{ padding:10px 12px; border-bottom:1px solid #e8eef6; }
-  th{ position:sticky; top:0; background:#0b4f79; color:#fff; text-align:left }
-  td.num, th.num{ text-align:right }
-  .muted{ opacity:.85 }
-
-  @media (max-width:720px){
-    .kpi{ grid-template-columns:1fr }
-  }
-</style>
+  <style>
+    :root{
+      --azul:#00416A; --accent:#0c6cbd; --card:#fff; --muted:#64748b;
+      --grad: linear-gradient(to right,#00416A,#E4E5E6);
+      --radius:14px; --shadow: 0 10px 24px rgba(0,0,0,.12);
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0; font-family:'Poppins',sans-serif; background:var(--grad); color:#0f172a;
+      min-height:100vh; padding:18px;
+    }
+    header{ color:#fff; text-align:center; margin-bottom:12px }
+    header h1{ margin:0 0 4px 0; line-height:1.1 }
+    .card{
+      background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow);
+      padding:14px; margin:0 auto; max-width:1100px;
+    }
+    .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center }
+    select,input,button{
+      font-family:inherit; font-size:15px; padding:10px 12px; border-radius:12px; border:1px solid #e5e7eb; background:#fff;
+    }
+    label{ font-size:13px; color:#0c2a5e; font-weight:600 }
+    .chip{ background:#e8edf6; color:#0c2a5e; border-radius:999px; padding:6px 10px; font-weight:700 }
+    .btn{ background:var(--accent); color:#fff; border:none; cursor:pointer; font-weight:700 }
+    .btn:active{ filter:brightness(.92) }
+    .btn-ghost{ background:#eef2f7; color:#0c2a5e; border:1px solid #d9e1ee }
+    .kpis{ display:flex; gap:10px; flex-wrap:wrap; margin-top:10px }
+    .kpi{ background:#f8fafc; border:1px solid #e5e7eb; border-radius:12px; padding:10px 12px; min-width:160px }
+    .kpi .v{ font-size:20px; font-weight:800 }
+    .tablewrap{ margin-top:12px; background:#fff; border:1px solid #e5e7eb; border-radius:12px; overflow:auto }
+    table{ width:100%; border-collapse:collapse; min-width:780px }
+    th,td{ padding:10px; border-bottom:1px solid #eef2f7; text-align:center }
+    th{ position:sticky; top:0; background:#00416A; color:#fff; z-index:1 }
+    td.l{ text-align:left }
+    .muted{ color:var(--muted) }
+    .toolbar{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:10px }
+    .right{ margin-left:auto }
+  </style>
 </head>
 <body>
-<main>
-  <h1>REPORTE DE INVENTARIO<br>(COSTO SIN IMPUESTO)</h1>
+  <header>
+    <h1>INVENTARIOS ANUALES – VISOR</h1>
+    <div class="muted">Consulta lo escaneado por <b>sucursal</b> y <b>usuario</b> • PROVSOFT</div>
+  </header>
 
-  <!-- Filtros -->
   <div class="card">
     <div class="row">
       <div>
-        <label>Fecha inicial</label>
-        <input type="date" id="fechaIni">
-      </div>
-      <div>
-        <label>Fecha final</label>
-        <input type="date" id="fechaFin">
-      </div>
-      <div>
-        <label>Sucursal (opcional)</label>
+        <label for="sucursal">Sucursal</label><br/>
         <select id="sucursal">
-          <option value="">— Todas —</option>
-          <option>Matriz</option>
-          <option>Provileon</option>
-          <option>Central</option>
-          <option>Osito</option>
-          <option>Bodega Principal</option>
-          <option>Bodega Abarrotes</option>
-          <option>Bodega Dulces</option>
-          <option>Zapata</option>
-          <option>Allende</option>
-          <option>Allende 2</option>
-          <option>Rio Verde</option>
-          <option>Montemorelos</option>
-          <option>Bodega 41</option>
+          <option value="">-- Selecciona sucursal --</option>
+          <option>Matriz</option><option>Provileon</option><option>Central</option><option>Osito</option>
+          <option>Bodega Principal</option><option>Bodega Abarrotes</option><option>Bodega Dulces</option>
+          <option>Zapata</option><option>Allende</option><option>Allende 2</option><option>Rio Verde</option>
+          <option>Montemorelos</option><option>Bodega 41</option>
         </select>
       </div>
       <div>
-        <label>Usuario (opcional)</label>
-        <input type="text" id="usuario" placeholder="Ej. Roberto">
+        <label for="usuario">Usuario (opcional)</label><br/>
+        <select id="usuario">
+          <option value="">— Todos —</option>
+          <option>Blanca</option><option>Lizandro</option><option>Edgardo</option><option>Fernanda</option>
+          <option>Esmeralda</option><option>Gibran</option><option>Roberto</option><option>Caleb</option><option>Prueba</option>
+          <option>Usuario 1</option><option>Usuario 2</option><option>Usuario 3</option><option>Usuario 4</option>
+        </select>
       </div>
+
       <div>
-        <label>&nbsp;</label>
-        <button class="primary" id="btnCargar">Cargar reporte</button>
+        <label for="vista">Vista</label><br/>
+        <select id="vista">
+          <option value="agrupado">Agrupado por producto</option>
+          <option value="crudo">Partidas (crudo)</option>
+        </select>
+      </div>
+
+      <div class="right">
+        <button id="btnCargar" class="btn">🔄 Cargar</button>
+        <button id="btnExportar" class="btn-ghost">⬇ Exportar Excel</button>
       </div>
     </div>
-    <div id="msgError" class="error"></div>
 
-    <div class="kpi">
-      <div class="card">
-        <div class="muted">Renglones</div>
-        <div class="n" id="kpiRenglones">0</div>
-      </div>
-      <div class="card">
-        <div class="muted">Cantidad total</div>
-        <div class="n" id="kpiCantidad">0.000</div>
-      </div>
-      <div class="card">
-        <div class="muted">Importe total (sin imp.)</div>
-        <div class="n" id="kpiImporte">$ 0.00</div>
-      </div>
+    <div class="kpis">
+      <div class="kpi"><div class="l muted">Partidas</div><div class="v" id="kPartidas">0</div></div>
+      <div class="kpi"><div class="l muted">Artículos únicos</div><div class="v" id="kUnicos">0</div></div>
+      <div class="kpi"><div class="l muted">Cantidad total</div><div class="v" id="kCantidad">0.000</div></div>
+      <div class="kpi"><div class="l muted">Sucursal</div><div class="v" id="kSucursal">—</div></div>
+      <div class="kpi"><div class="l muted">Usuario</div><div class="v" id="kUsuario">Todos</div></div>
+    </div>
+
+    <div class="toolbar">
+      <span class="chip" id="estado">Listo</span>
+    </div>
+
+    <div class="tablewrap">
+      <table id="tabla">
+        <thead id="thead"></thead>
+        <tbody id="tbody"></tbody>
+      </table>
     </div>
   </div>
 
-  <!-- Detalle -->
-  <div class="section-title">Detalle por usuario</div>
-  <div class="actions-right"><button id="btnCsvDetalle">Exportar CSV</button></div>
-  <div class="tbl-wrap"><table id="tblDetalle">
-    <thead>
-      <tr>
-        <th>#</th><th>Usuario</th><th>Sucursal</th><th>Código</th><th>Descripción</th>
-        <th class="num">Cantidad</th><th class="num">Costo Unit. (sin imp.)</th><th class="num">Importe</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table></div>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import {
+      getFirestore, collectionGroup, query, where, getDocs
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-  <!-- Concentrado por sucursal -->
-  <div class="section-title">Concentrado por sucursal</div>
-  <div class="actions-right"><button id="btnCsvConc">Exportar CSV</button></div>
-  <div class="tbl-wrap"><table id="tblConc">
-    <thead>
-      <tr>
-        <th>#</th><th>Sucursal</th><th class="num">Renglones</th><th class="num">Cantidad total</th><th class="num">Importe total</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table></div>
-</main>
+    /* ====== CONFIG FIREBASE (mismo proyecto) ====== */
+    const firebaseConfig = {
+      apiKey: "AIzaSyCK5nb6u2CGRJ8AB1aPlRn54b97bdeAFeM",
+      authDomain: "inventariopv-643f1.firebaseapp.com",
+      projectId: "inventariopv-643f1",
+      storageBucket: "inventariopv-643f1.appspot.com",
+      messagingSenderId: "96242533231",
+      appId: "1:96242533231:web:aae75a18fbaf9840529e9a"
+    };
+    const app = initializeApp(firebaseConfig);
+    const db  = getFirestore(app);
 
-<script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-  import {
-    getFirestore, collection, getDocs, getDoc, doc, query, where
-  } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    /* ====== UTIL ====== */
+    const $ = (id)=>document.getElementById(id);
+    const fmtDec = (n, d=3)=> Number(n||0).toFixed(d);
 
-  // ==== CONFIG FIREBASE (MISMO PROYECTO) ====
-  const firebaseConfig = {
-    apiKey: "AIzaSyCK5nb6u2CGRJ8AB1aPlRn54b97bdeAFeM",
-    authDomain: "inventariopv-643f1.firebaseapp.com",
-    projectId: "inventariopv-643f1",
-    storageBucket: "inventariopv-643f1.appspot.com",
-    messagingSenderId: "96242533231",
-    appId: "1:96242533231:web:aae75a18fbaf9840529e9a"
-  };
-  const app = initializeApp(firebaseConfig);
-  const db  = getFirestore(app);
+    const selSucursal = $("sucursal");
+    const selUsuario  = $("usuario");
+    const selVista    = $("vista");
+    const btnCargar   = $("btnCargar");
+    const btnExportar = $("btnExportar");
+    const estado      = $("estado");
 
-  // ==== UTIL ====
-  const $ = (id)=>document.getElementById(id);
-  const fmtQty = (n)=> (Number(n||0)).toFixed(3);
-  const fmtMoney = (n)=> new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN',minimumFractionDigits:2}).format(Number(n||0));
+    const thead = $("thead");
+    const tbody = $("tbody");
 
-  // default: hoy
-  const today = new Date();
-  const pad2 = n=>String(n).padStart(2,'0');
-  const ymd = (d)=> `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
-  $("fechaIni").value = ymd(today);
-  $("fechaFin").value = ymd(today);
+    const kPartidas = $("kPartidas");
+    const kUnicos   = $("kUnicos");
+    const kCantidad = $("kCantidad");
+    const kSucursal = $("kSucursal");
+    const kUsuario  = $("kUsuario");
 
-  let cacheProducto = new Map(); // codigo -> {concepto, costoSinImpuesto}
+    let datosCrudos = [];     // filas crudas (escaneos)
+    let datosAgrupa = [];     // filas agrupadas por producto
+    let ultimaDescarga = [];  // lo que está visible (para exportar)
 
-  async function getProducto(codigo){
-    if(cacheProducto.has(codigo)) return cacheProducto.get(codigo);
-    const ref = doc(db,"productos", String(codigo));
-    const snap = await getDoc(ref);
-    const data = snap.exists()? snap.data() : {};
-    const obj = { concepto: data.concepto || "(Sin descripción)", costo: Number(
-      data?.costoSinImpuesto ?? data?.costoSinImpuestos ?? data?.costo_sin_impuesto ?? data?.costo ?? 0
-    )};
-    cacheProducto.set(codigo, obj);
-    return obj;
-  }
-
-  function rangoEpochMs(fechaIniStr, fechaFinStr){
-    const ini = new Date(fechaIniStr+"T00:00:00");
-    const fin = new Date(fechaFinStr+"T23:59:59");
-    return { ini: ini.getTime(), fin: fin.getTime() };
-  }
-
-  async function cargarUsuariosDeSucursal(sucursal){
-    // inventarios/{sucursal}/usuarios/*
-    const col = collection(db,"inventarios",sucursal,"usuarios");
-    const snap = await getDocs(col);
-    return snap.docs.map(d=> d.id);
-  }
-
-  async function queryEscaneos(sucursal, usuario, msIni, msFin){
-    // inventarios/{sucursal}/usuarios/{usuario}/escaneos
-    const col = collection(db, "inventarios", sucursal, "usuarios", usuario, "escaneos");
-    // Se filtra por epochMs (se necesita índice compuesto si agregas otros where)
-    const qy  = query(col, where("epochMs", ">=", msIni), where("epochMs", "<=", msFin));
-    const snap = await getDocs(qy);
-    return snap.docs.map(d=> ({ id:d.id, ...d.data(), sucursal, usuario }));
-  }
-
-  function limpiarTablas(){
-    $("tblDetalle").querySelector("tbody").innerHTML = "";
-    $("tblConc").querySelector("tbody").innerHTML = "";
-    $("kpiRenglones").textContent = "0";
-    $("kpiCantidad").textContent = "0.000";
-    $("kpiImporte").textContent  = "$ 0.00";
-  }
-
-  $("btnCargar").addEventListener("click", async ()=>{
-    $("msgError").textContent = "";
-    limpiarTablas();
-    cacheProducto.clear();
-
-    const fechaIni = $("fechaIni").value;
-    const fechaFin = $("fechaFin").value;
-    const sucursal = $("sucursal").value.trim();   // vacío = todas
-    const usuario  = $("usuario").value.trim();    // vacío = todos
-
-    if(!fechaIni || !fechaFin){
-      $("msgError").textContent = "Selecciona fecha inicial y final.";
-      return;
+    function setEstado(msg){ estado.textContent = msg; }
+    function limpiarTabla(){
+      thead.innerHTML=""; tbody.innerHTML="";
     }
-    const {ini, fin} = rangoEpochMs(fechaIni, fechaFin);
 
-    try{
-      let sucursales = [];
-      if(sucursal){ sucursales = [sucursal]; }
-      else{
-        // Si no especificas, toma TODAS las sucursales donde existan documentos “inventarios/*/usuarios”
-        // (lista básica – agrega las que usas)
-        sucursales = ["Matriz","Provileon","Central","Osito","Bodega Principal","Bodega Abarrotes","Bodega Dulces","Zapata","Allende","Allende 2","Rio Verde","Montemorelos","Bodega 41"];
-      }
+    function kpisDesdeCrudo(rows){
+      const partidas = rows.length;
+      const unicos = new Set(rows.map(r=> r.codigo || "")).size;
+      const suma = rows.reduce((a,r)=> a + Number(r.cantidad || 0), 0);
+      kPartidas.textContent = partidas;
+      kUnicos.textContent = unicos;
+      kCantidad.textContent = fmtDec(suma, 3);
+    }
 
-      const detalle = [];                 // filas para tabla detalle
-      const conc   = new Map();           // sucursal -> {renglones, cantidad, importe}
-
-      for(const suc of sucursales){
-        // usuarios de esta sucursal
-        let usuarios = [];
-        if(usuario){ usuarios = [usuario]; }
-        else{
-          try{
-            usuarios = await cargarUsuariosDeSucursal(suc);
-          }catch(e){
-            // si la sucursal no existe, continúa
-            continue;
-          }
-        }
-
-        for(const u of usuarios){
-          const filas = await queryEscaneos(suc, u, ini, fin);
-          for(const f of filas){
-            const prod = await getProducto(f.codigo);
-            const costo = Number(prod.costo || 0);
-            const importe = costo * Number(f.cantidad||0);
-
-            detalle.push({
-              usuario: u,
-              sucursal: suc,
-              codigo: f.codigo || "",
-              descripcion: prod.concepto || f.descripcion || "",
-              cantidad: Number(f.cantidad||0),
-              costo,
-              importe
-            });
-
-            const agg = conc.get(suc) || { renglones:0, cantidad:0, importe:0 };
-            agg.renglones += 1;
-            agg.cantidad  += Number(f.cantidad||0);
-            agg.importe   += importe;
-            conc.set(suc, agg);
-          }
+    function agruparPorProducto(rows){
+      const map = new Map();
+      for(const r of rows){
+        const key = r.codigo || "";
+        if(!map.has(key)){
+          map.set(key, {
+            codigo: key,
+            descripcion: r.descripcion || "SIN DESCRIPCIÓN",
+            cantidad: Number(r.cantidad || 0),
+            partidas: 1,
+            ultimaFecha: r.fecha || ""
+          });
+        }else{
+          const it = map.get(key);
+          it.cantidad += Number(r.cantidad || 0);
+          it.partidas += 1;
+          // conserva la más reciente lexicográficamente (YYYY-MM-DD HH:mm:ss)
+          if((r.fecha||"") > (it.ultimaFecha||"")) it.ultimaFecha = r.fecha || "";
         }
       }
-
-      // Render detalle
-      const tb = $("tblDetalle").querySelector("tbody");
-      let i=0, totalCant=0, totalImp=0;
-      detalle.sort((a,b)=> (a.sucursal||"").localeCompare(b.sucursal||"") || (a.usuario||"").localeCompare(b.usuario||""));
-      for(const r of detalle){
-        totalCant += r.cantidad;
-        totalImp  += r.importe;
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td>${++i}</td>
-          <td>${r.usuario}</td>
-          <td>${r.sucursal}</td>
-          <td>${r.codigo}</td>
-          <td>${r.descripcion}</td>
-          <td class="num">${fmtQty(r.cantidad)}</td>
-          <td class="num">${fmtMoney(r.costo)}</td>
-          <td class="num">${fmtMoney(r.importe)}</td>
-        `;
-        tb.appendChild(tr);
-      }
-
-      // KPIs
-      $("kpiRenglones").textContent = String(detalle.length);
-      $("kpiCantidad").textContent  = fmtQty(totalCant);
-      $("kpiImporte").textContent   = fmtMoney(totalImp);
-
-      // Render concentrado
-      const tbc = $("tblConc").querySelector("tbody");
-      let j=0;
-      const concRows = Array.from(conc.entries()).map(([s, v])=>({sucursal:s, ...v}));
-      concRows.sort((a,b)=> (a.sucursal||"").localeCompare(b.sucursal||""));
-      for(const r of concRows){
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td>${++j}</td>
-          <td>${r.sucursal}</td>
-          <td class="num">${r.renglones}</td>
-          <td class="num">${fmtQty(r.cantidad)}</td>
-          <td class="num">${fmtMoney(r.importe)}</td>
-        `;
-        tbc.appendChild(tr);
-      }
-
-      if(detalle.length===0){
-        $("msgError").textContent = "No hay registros para ese filtro.";
-      }
-
-      // Guarda los últimos datos para CSV
-      window.__detalle = detalle;
-      window.__conc    = concRows;
-
-    }catch(err){
-      console.error(err);
-      $("msgError").textContent = "Error al generar reporte.";
+      // a arreglo ordenado por descripción
+      return Array.from(map.values()).sort((a,b)=> (a.descripcion||"").localeCompare(b.descripcion||""));
     }
-  });
 
-  // ===== Exportar CSV
-  function toCSV(rows, headers){
-    const escape = (v)=> `"${String(v??"").replace(/"/g,'""')}"`;
-    const head = headers.map(h=>escape(h)).join(",");
-    const body = rows.map(r=> headers.map(h=> escape(r[h])).join(",")).join("\n");
-    return head + "\n" + body;
-  }
-  function download(filename, text){
-    const blob = new Blob([text], {type:"text/csv;charset=utf-8;"});
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement("a");
-    a.href = url; a.download = filename; a.click();
-    URL.revokeObjectURL(url);
-  }
+    function renderCrudo(rows){
+      thead.innerHTML = `
+        <tr>
+          <th>#</th><th>Código</th><th>Descripción</th><th>Cantidad</th><th>Fecha</th><th>Usuario</th><th>Folio</th>
+        </tr>`;
+      tbody.innerHTML = rows.map((r,i)=>`
+        <tr>
+          <td>${i+1}</td>
+          <td class="l">${r.codigo||""}</td>
+          <td class="l">${r.descripcion||""}</td>
+          <td>${fmtDec(r.cantidad,3)}</td>
+          <td>${r.fecha||""}</td>
+          <td>${r.usuario||""}</td>
+          <td class="l">${r.folioSesion||""}</td>
+        </tr>`).join("");
+      ultimaDescarga = rows;
+    }
 
-  $("btnCsvDetalle").addEventListener("click", ()=>{
-    const rows = (window.__detalle||[]).map(r=>({
-      "Usuario":r.usuario, "Sucursal":r.sucursal, "Código":r.codigo, "Descripción":r.descripcion,
-      "Cantidad":fmtQty(r.cantidad), "Costo Unit. (sin imp.)":r.costo, "Importe":r.importe
-    }));
-    const csv = toCSV(rows, ["Usuario","Sucursal","Código","Descripción","Cantidad","Costo Unit. (sin imp.)","Importe"]);
-    download("detalle_inventario.csv", csv);
-  });
+    function renderAgrupado(rows){
+      thead.innerHTML = `
+        <tr>
+          <th>#</th><th>Código</th><th>Descripción</th><th>Cantidad Total</th><th>Partidas</th><th>Última fecha</th>
+        </tr>`;
+      tbody.innerHTML = rows.map((r,i)=>`
+        <tr>
+          <td>${i+1}</td>
+          <td class="l">${r.codigo}</td>
+          <td class="l">${r.descripcion}</td>
+          <td>${fmtDec(r.cantidad,3)}</td>
+          <td>${r.partidas}</td>
+          <td>${r.ultimaFecha}</td>
+        </tr>`).join("");
+      ultimaDescarga = rows;
+    }
 
-  $("btnCsvConc").addEventListener("click", ()=>{
-    const rows = (window.__conc||[]).map(r=>({
-      "Sucursal":r.sucursal, "Renglones":r.renglones, "Cantidad total":fmtQty(r.cantidad), "Importe total":r.importe
-    }));
-    const csv = toCSV(rows, ["Sucursal","Renglones","Cantidad total","Importe total"]);
-    download("concentrado_sucursal.csv", csv);
-  });
-</script>
+    function render(){
+      if(selVista.value === "crudo"){
+        renderCrudo(datosCrudos);
+      }else{
+        renderAgrupado(datosAgrupa);
+      }
+    }
+
+    async function cargar(){
+      const suc = selSucursal.value.trim();
+      const usr = selUsuario.value.trim();
+      if(!suc){ alert("Selecciona una sucursal"); return; }
+
+      setEstado("Cargando…");
+      limpiarTabla();
+      kSucursal.textContent = suc || "—";
+      kUsuario.textContent  = usr || "Todos";
+
+      // Consulta por collectionGroup('escaneos'), filtrando por campos guardados
+      let q = query(collectionGroup(db, "escaneos"), where("sucursal","==",suc));
+      if(usr){ q = query(collectionGroup(db, "escaneos"), where("sucursal","==",suc), where("usuario","==",usr)); }
+
+      const snap = await getDocs(q);
+      const rows = [];
+      snap.forEach(d=>{
+        const r = d.data();
+        rows.push({
+          codigo: r.codigo || "",
+          descripcion: r.descripcion || "",
+          cantidad: Number(r.cantidad || 0),
+          fecha: r.fecha || "",
+          usuario: r.usuario || "",
+          sucursal: r.sucursal || "",
+          folioSesion: r.folioSesion || "",
+          epochMs: r.epochMs || 0
+        });
+      });
+
+      // Orden: fecha descendente para crudo
+      rows.sort((a,b)=> (b.epochMs||0) - (a.epochMs||0));
+      datosCrudos = rows;
+      datosAgrupa = agruparPorProducto(rows);
+      kpisDesdeCrudo(rows);
+      render();
+      setEstado(rows.length ? `Listo: ${rows.length} partidas` : "Sin resultados");
+    }
+
+    btnCargar.addEventListener("click", cargar);
+    selVista.addEventListener("change", render);
+
+    // Exportar lo visible a Excel
+    btnExportar.addEventListener("click", ()=>{
+      if(!ultimaDescarga.length){ alert("Nada que exportar"); return; }
+      let ws;
+      if(selVista.value === "crudo"){
+        const data = [
+          ["#", "Código", "Descripción", "Cantidad", "Fecha", "Usuario", "Folio"]
+        ];
+        ultimaDescarga.forEach((r,i)=>{
+          data.push([i+1, r.codigo, r.descripcion, Number(r.cantidad||0), r.fecha, r.usuario, r.folioSesion]);
+        });
+        ws = XLSX.utils.aoa_to_sheet(data);
+      }else{
+        const data = [
+          ["#", "Código", "Descripción", "Cantidad Total", "Partidas", "Última fecha"]
+        ];
+        ultimaDescarga.forEach((r,i)=>{
+          data.push([i+1, r.codigo, r.descripcion, Number(r.cantidad||0), r.partidas, r.ultimaFecha]);
+        });
+        ws = XLSX.utils.aoa_to_sheet(data);
+      }
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Inventario");
+      const suc = selSucursal.value || "Sucursal";
+      const usr = selUsuario.value || "Todos";
+      XLSX.writeFile(wb, `Inventario_${suc}_${usr}_${new Date().toISOString().slice(0,10)}.xlsx`);
+    });
+
+    // (Opcional) carga automática si ya hay algo seleccionado
+    // cargar();
+  </script>
 </body>
 </html>
