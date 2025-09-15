@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
-  <title>Visor – Inventarios Escaneados</title>
+  <title>Inventario Costeado – PROVSOFT</title>
 
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet"/>
   <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
@@ -42,15 +42,15 @@
     th,td{ padding:10px; border-bottom:1px solid #eef2f7; text-align:center }
     th{ position:sticky; top:0; background:#00416A; color:#fff; z-index:1 }
     td.l{ text-align:left }
-    .muted{ color:var(--muted) }
+    .muted{ color:#64748b }
     .toolbar{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:10px }
     .right{ margin-left:auto }
   </style>
 </head>
 <body>
   <header>
-    <h1>INVENTARIOS ANUALES – VISOR</h1>
-    <div class="muted">Consulta lo escaneado por <b>sucursal</b> y <b>usuario</b> • PROVSOFT</div>
+    <h1>INVENTARIO COSTEADO (sin IVA)</h1>
+    <div class="muted">Por <b>sucursal</b> y <b>usuario</b> • PROVSOFT</div>
   </header>
 
   <div class="card">
@@ -72,15 +72,6 @@
           <option>Blanca</option><option>Lizandro</option><option>Edgardo</option><option>Fernanda</option>
           <option>Esmeralda</option><option>Gibran</option><option>Roberto</option><option>Caleb</option><option>Prueba</option>
           <option>Usuario 1</option><option>Usuario 2</option><option>Usuario 3</option><option>Usuario 4</option>
-        </select>
-      </div>
-
-      <div>
-        <label for="vista">Vista</label><br/>
-        <select id="vista">
-          <option value="agrupado">Agrupado por producto</option>
-          <option value="crudo">Partidas (crudo)</option>
-          <option value="costeado">Costeado (sin IVA)</option>
         </select>
       </div>
 
@@ -117,7 +108,6 @@
       getFirestore, collection, getDocs, query, where, documentId
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-    /* ====== CONFIG FIREBASE ====== */
     const firebaseConfig = {
       apiKey: "AIzaSyCK5nb6u2CGRJ8AB1aPlRn54b97bdeAFeM",
       authDomain: "inventariopv-643f1.firebaseapp.com",
@@ -129,291 +119,113 @@
     const app = initializeApp(firebaseConfig);
     const db  = getFirestore(app);
 
-    /* ====== LISTA DE USUARIOS PARA FAN-OUT ====== */
     const USUARIOS = ["Blanca","Lizandro","Edgardo","Fernanda","Esmeralda","Gibran","Roberto","Caleb","Prueba","Usuario 1","Usuario 2","Usuario 3","Usuario 4"];
 
-    /* ====== UTIL ====== */
     const $ = (id)=>document.getElementById(id);
-    const fmtDec = (n, d=3)=> Number(n||0).toFixed(d);
+    const fmtDec = (n,d=3)=>Number(n||0).toFixed(d);
     const fmtMoney = (n)=> n.toLocaleString('es-MX',{style:'currency',currency:'MXN',minimumFractionDigits:2});
 
-    const selSucursal = $("sucursal");
-    const selUsuario  = $("usuario");
-    const selVista    = $("vista");
-    const btnCargar   = $("btnCargar");
-    const btnExportar = $("btnExportar");
-    const estado      = $("estado");
+    const selSucursal=$("sucursal"), selUsuario=$("usuario");
+    const btnCargar=$("btnCargar"), btnExportar=$("btnExportar"), estado=$("estado");
+    const thead=$("thead"), tbody=$("tbody");
+    const kPartidas=$("kPartidas"), kUnicos=$("kUnicos"), kCantidad=$("kCantidad"), kValor=$("kValor");
+    const kSucursal=$("kSucursal"), kUsuario=$("kUsuario");
 
-    const thead = $("thead");
-    const tbody = $("tbody");
+    let datosAgrupa=[], ultimaDescarga=[];
+    let costCache=new Map();
 
-    const kPartidas = $("kPartidas");
-    const kUnicos   = $("kUnicos");
-    const kCantidad = $("kCantidad");
-    const kValor    = $("kValor");
-    const kSucursal = $("kSucursal");
-    const kUsuario  = $("kUsuario");
-
-    let datosCrudos = [];     // filas crudas (escaneos)
-    let datosAgrupa = [];     // filas agrupadas por producto
-    let costCache   = new Map(); // codigo -> costoSinImpuesto (number)
-    let ultimaDescarga = [];  // lo que está visible (para exportar)
-
-    function setEstado(msg){ estado.textContent = msg; }
+    function setEstado(m){ estado.textContent=m; }
     function limpiarTabla(){ thead.innerHTML=""; tbody.innerHTML=""; }
 
-    function kpisDesdeCrudo(rows){
-      const partidas = rows.length;
-      const unicos = new Set(rows.map(r=> r.codigo || "")).size;
-      const sumaCant = rows.reduce((a,r)=> a + Number(r.cantidad || 0), 0);
-      kPartidas.textContent = partidas;
-      kUnicos.textContent   = unicos;
-      kCantidad.textContent = fmtDec(sumaCant, 3);
-      // valor (si tenemos costos cargados para los códigos presentes)
-      const val = rows.reduce((acc,r)=>{
-        const c = Number(costCache.get(r.codigo) ?? 0);
-        return acc + (Number(r.cantidad||0) * c);
-      }, 0);
-      kValor.textContent = fmtMoney(val);
-    }
-
     function agruparPorProducto(rows){
-      const map = new Map();
+      const map=new Map();
       for(const r of rows){
-        const key = r.codigo || "";
-        if(!map.has(key)){
-          map.set(key, {
-            codigo: key,
-            descripcion: r.descripcion || "SIN DESCRIPCIÓN",
-            cantidad: Number(r.cantidad || 0),
-            partidas: 1,
-            ultimaFecha: r.fecha || ""
-          });
+        const k=r.codigo||"";
+        if(!map.has(k)){
+          map.set(k,{codigo:k, descripcion:r.descripcion||"SIN DESC", cantidad:Number(r.cantidad||0)});
         }else{
-          const it = map.get(key);
-          it.cantidad += Number(r.cantidad || 0);
-          it.partidas += 1;
-          if((r.fecha||"") > (it.ultimaFecha||"")) it.ultimaFecha = r.fecha || "";
+          const it=map.get(k);
+          it.cantidad+=Number(r.cantidad||0);
         }
       }
-      return Array.from(map.values()).sort((a,b)=> (a.descripcion||"").localeCompare(b.descripcion||""));
+      return Array.from(map.values());
     }
 
-    /* ====== COSTOS: fetch en lotes ====== */
-    async function cargarCostosParaCodigos(codigos){
-      const faltantes = codigos.filter(c => !costCache.has(c));
-      if(!faltantes.length) return;
-      const chunks = [];
-      for(let i=0;i<faltantes.length;i+=10) chunks.push(faltantes.slice(i, i+10)); // 'in' máx 10 ids
-      for(const batch of chunks){
-        const qCost = query(collection(db,"productos"), where(documentId(),'in', batch));
-        const snap  = await getDocs(qCost);
+    async function cargarCostos(codigos){
+      const falt=codigos.filter(c=>!costCache.has(c));
+      if(!falt.length) return;
+      for(let i=0;i<falt.length;i+=10){
+        const batch=falt.slice(i,i+10);
+        const q=query(collection(db,"productos"), where(documentId(),'in',batch));
+        const snap=await getDocs(q);
         snap.forEach(d=>{
-          const data = d.data() || {};
-          const costo = Number(data.costoSinImpuesto ?? 0);
-          costCache.set(d.id, isFinite(costo) ? costo : 0);
+          const c=Number(d.data().costoSinImpuesto??0);
+          costCache.set(d.id,isFinite(c)?c:0);
         });
-        // si alguno no existe, pon 0 para evitar re-consulta
-        batch.forEach(id => { if(!costCache.has(id)) costCache.set(id, 0); });
+        batch.forEach(id=>{ if(!costCache.has(id)) costCache.set(id,0); });
       }
     }
 
-    /* ====== RENDER ====== */
-    function renderCrudo(rows){
-      thead.innerHTML = `
-        <tr>
-          <th>#</th><th>Código</th><th>Descripción</th><th>Cantidad</th><th>Fecha</th><th>Usuario</th><th>Folio</th>
+    function renderCosteado(rows){
+      thead.innerHTML=`
+        <tr><th>#</th><th>Código</th><th>Descripción</th>
+        <th>Cantidad</th><th>Costo Unit.</th><th>Total (sin IVA)</th></tr>`;
+      let total=0, sumaCant=0;
+      tbody.innerHTML=rows.map((r,i)=>{
+        const cu=Number(costCache.get(r.codigo)??0);
+        const tt=cu*Number(r.cantidad||0);
+        total+=tt; sumaCant+=Number(r.cantidad||0);
+        return `<tr>
+          <td>${i+1}</td><td class="l">${r.codigo}</td><td class="l">${r.descripcion}</td>
+          <td>${fmtDec(r.cantidad,3)}</td><td>${fmtMoney(cu)}</td><td>${fmtMoney(tt)}</td>
         </tr>`;
-      tbody.innerHTML = rows.map((r,i)=>`
-        <tr>
-          <td>${i+1}</td>
-          <td class="l">${r.codigo||""}</td>
-          <td class="l">${r.descripcion||""}</td>
-          <td>${fmtDec(r.cantidad,3)}</td>
-          <td>${r.fecha||""}</td>
-          <td>${r.usuario||""}</td>
-          <td class="l">${r.folioSesion||""}</td>
-        </tr>`).join("");
-      ultimaDescarga = rows;
-    }
-
-    function renderAgrupado(rows){
-      thead.innerHTML = `
-        <tr>
-          <th>#</th><th>Código</th><th>Descripción</th><th>Cantidad Total</th><th>Partidas</th><th>Última fecha</th>
-        </tr>`;
-      tbody.innerHTML = rows.map((r,i)=>`
-        <tr>
-          <td>${i+1}</td>
-          <td class="l">${r.codigo}</td>
-          <td class="l">${r.descripcion}</td>
-          <td>${fmtDec(r.cantidad,3)}</td>
-          <td>${r.partidas}</td>
-          <td>${r.ultimaFecha}</td>
-        </tr>`).join("");
-      ultimaDescarga = rows;
-    }
-
-    function renderCosteado(rowsAgrupa){
-      thead.innerHTML = `
-        <tr>
-          <th>#</th><th>Código</th><th>Descripción</th>
-          <th>Cantidad</th><th>Costo Unit.</th><th>Total (sin IVA)</th>
-        </tr>`;
-      let total = 0;
-      tbody.innerHTML = rowsAgrupa.map((r,i)=>{
-        const cu = Number(costCache.get(r.codigo) ?? 0);
-        const tt = cu * Number(r.cantidad || 0);
-        total += tt;
-        return `
-          <tr>
-            <td>${i+1}</td>
-            <td class="l">${r.codigo}</td>
-            <td class="l">${r.descripcion}</td>
-            <td>${fmtDec(r.cantidad,3)}</td>
-            <td>${fmtMoney(cu)}</td>
-            <td>${fmtMoney(tt)}</td>
-          </tr>`;
       }).join("");
-      kValor.textContent = fmtMoney(total);
-      ultimaDescarga = rowsAgrupa.map(r=>({
-        ...r,
-        costoUnit: Number(costCache.get(r.codigo) ?? 0),
-        total: Number((costCache.get(r.codigo) ?? 0)) * Number(r.cantidad || 0),
-      }));
+      kPartidas.textContent=rows.length;
+      kUnicos.textContent=rows.length;
+      kCantidad.textContent=fmtDec(sumaCant,3);
+      kValor.textContent=fmtMoney(total);
+      ultimaDescarga=rows.map(r=>({codigo:r.codigo, desc:r.descripcion, cantidad:r.cantidad, costo:costCache.get(r.codigo)||0, total:(costCache.get(r.codigo)||0)*r.cantidad}));
     }
 
-    async function render(){
-      if(selVista.value === "crudo"){
-        renderCrudo(datosCrudos);
-      }else if(selVista.value === "agrupado"){
-        renderAgrupado(datosAgrupa);
-      }else{ // costeado
-        // asegúrate de tener costos
-        const cods = datosAgrupa.map(x=>x.codigo).filter(Boolean);
-        setEstado("Cargando costos…");
-        await cargarCostosParaCodigos(cods);
-        setEstado("Listo");
-        renderCosteado(datosAgrupa);
-      }
-      // refresca KPIs (incluye valor si hay costos)
-      kpisDesdeCrudo(datosCrudos);
-    }
-
-    /* ========= CARGA (parche sin índices) ========= */
     async function cargar(){
-      const suc = selSucursal.value.trim();
-      const usr = selUsuario.value.trim();
-      if(!suc){ alert("Selecciona una sucursal"); return; }
+      const suc=selSucursal.value.trim(), usr=selUsuario.value.trim();
+      if(!suc) return alert("Selecciona una sucursal");
+      setEstado("Cargando…");
+      limpiarTabla(); kSucursal.textContent=suc; kUsuario.textContent=usr||"Todos";
+      costCache=new Map();
 
-      setEstado("Cargando escaneos…");
-      limpiarTabla();
-      kSucursal.textContent = suc || "—";
-      kUsuario.textContent  = usr || "Todos";
-      costCache = new Map(); // limpia cache al cambiar filtro
-
-      let rows = [];
-
+      let rows=[];
       if(usr){
-        // inventarios/{sucursal}/usuarios/{usuario}/escaneos
-        const col = collection(db, "inventarios", suc, "usuarios", usr, "escaneos");
-        const snap = await getDocs(col);
-        snap.forEach(d=>{
-          const r = d.data();
-          rows.push({
-            codigo: r.codigo || "",
-            descripcion: r.descripcion || "",
-            cantidad: Number(r.cantidad || 0),
-            fecha: r.fecha || "",
-            usuario: r.usuario || usr,
-            sucursal: suc,
-            folioSesion: r.folioSesion || "",
-            epochMs: r.epochMs || 0
-          });
-        });
+        const col=collection(db,"inventarios",suc,"usuarios",usr,"escaneos");
+        const snap=await getDocs(col);
+        snap.forEach(d=>{const r=d.data(); rows.push({codigo:r.codigo,descripcion:r.descripcion,cantidad:Number(r.cantidad||0)});});
       }else{
-        // fan-out por todos los usuarios definidos
-        const lotes = await Promise.all(
-          USUARIOS.map(async (u)=>{
-            const col = collection(db, "inventarios", suc, "usuarios", u, "escaneos");
-            const snap = await getDocs(col);
-            const arr = [];
-            snap.forEach(d=>{
-              const r = d.data();
-              arr.push({
-                codigo: r.codigo || "",
-                descripcion: r.descripcion || "",
-                cantidad: Number(r.cantidad || 0),
-                fecha: r.fecha || "",
-                usuario: r.usuario || u,
-                sucursal: suc,
-                folioSesion: r.folioSesion || "",
-                epochMs: r.epochMs || 0
-              });
-            });
-            return arr;
-          })
-        );
-        rows = lotes.flat();
+        const lotes=await Promise.all(USUARIOS.map(async u=>{
+          const col=collection(db,"inventarios",suc,"usuarios",u,"escaneos");
+          const snap=await getDocs(col); const arr=[];
+          snap.forEach(d=>{const r=d.data(); arr.push({codigo:r.codigo,descripcion:r.descripcion,cantidad:Number(r.cantidad||0)});});
+          return arr;
+        }));
+        rows=lotes.flat();
       }
 
-      // Orden por fecha desc para crudo
-      rows.sort((a,b)=> (b.epochMs||0) - (a.epochMs||0));
-      datosCrudos = rows;
-      datosAgrupa = agruparPorProducto(rows);
-
-      // Si ya está seleccionada la vista costeada, precarga costos de una vez
-      if(selVista.value === "costeado"){
-        const cods = datosAgrupa.map(x=>x.codigo).filter(Boolean);
-        setEstado("Cargando costos…");
-        await cargarCostosParaCodigos(cods);
-      }
-
-      setEstado(rows.length ? `Listo: ${rows.length} partidas` : "Sin resultados");
-      render();
+      datosAgrupa=agruparPorProducto(rows);
+      await cargarCostos(datosAgrupa.map(x=>x.codigo));
+      renderCosteado(datosAgrupa);
+      setEstado(rows.length?`Listo (${rows.length} partidas)`:"Sin resultados");
     }
 
-    // Exportar lo visible a Excel
-    btnExportar.addEventListener("click", ()=>{
-      if(!ultimaDescarga.length){ alert("Nada que exportar"); return; }
-      let ws;
-      if(selVista.value === "crudo"){
-        const data = [
-          ["#", "Código", "Descripción", "Cantidad", "Fecha", "Usuario", "Folio"]
-        ];
-        ultimaDescarga.forEach((r,i)=>{
-          data.push([i+1, r.codigo, r.descripcion, Number(r.cantidad||0), r.fecha, r.usuario, r.folioSesion]);
-        });
-        ws = XLSX.utils.aoa_to_sheet(data);
+    btnCargar.addEventListener("click",cargar);
 
-      }else if(selVista.value === "agrupado"){
-        const data = [
-          ["#", "Código", "Descripción", "Cantidad Total", "Partidas", "Última fecha"]
-        ];
-        ultimaDescarga.forEach((r,i)=>{
-          data.push([i+1, r.codigo, r.descripcion, Number(r.cantidad||0), r.partidas, r.ultimaFecha]);
-        });
-        ws = XLSX.utils.aoa_to_sheet(data);
-
-      }else{ // costeado
-        const data = [
-          ["#", "Código", "Descripción", "Cantidad", "Costo Unit. (sin IVA)", "Total (sin IVA)"]
-        ];
-        ultimaDescarga.forEach((r,i)=>{
-          data.push([i+1, r.codigo, r.descripcion, Number(r.cantidad||0), Number(r.costoUnit||0), Number(r.total||0)]);
-        });
-        ws = XLSX.utils.aoa_to_sheet(data);
-      }
-
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, selVista.value === "costeado" ? "Costeado" : "Inventario");
-      const suc = selSucursal.value || "Sucursal";
-      const usr = selUsuario.value || "Todos";
-      XLSX.writeFile(wb, `Inventario_${selVista.value}_${suc}_${usr}_${new Date().toISOString().slice(0,10)}.xlsx`);
+    btnExportar.addEventListener("click",()=>{
+      if(!ultimaDescarga.length) return alert("Nada que exportar");
+      const data=[["#","Código","Descripción","Cantidad","Costo Unit.","Total"]];
+      ultimaDescarga.forEach((r,i)=>data.push([i+1,r.codigo,r.desc,r.cantidad,r.costo,r.total]));
+      const ws=XLSX.utils.aoa_to_sheet(data), wb=XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb,ws,"Costeado");
+      const suc=selSucursal.value||"Sucursal", usr=selUsuario.value||"Todos";
+      XLSX.writeFile(wb,`InventarioCosteado_${suc}_${usr}_${new Date().toISOString().slice(0,10)}.xlsx`);
     });
-
-    btnCargar.addEventListener("click", cargar);
-    selVista.addEventListener("change", render);
   </script>
 </body>
 </html>
