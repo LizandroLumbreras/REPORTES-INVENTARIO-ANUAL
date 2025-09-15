@@ -82,9 +82,7 @@
     </div>
 
     <div class="kpis">
-      <div class="kpi"><div class="l muted">Partidas</div><div class="v" id="kPartidas">0</div></div>
       <div class="kpi"><div class="l muted">Artículos únicos</div><div class="v" id="kUnicos">0</div></div>
-      <div class="kpi"><div class="l muted">Cantidad total</div><div class="v" id="kCantidad">0.000</div></div>
       <div class="kpi"><div class="l muted">Valor inventario</div><div class="v" id="kValor">$0.00</div></div>
       <div class="kpi"><div class="l muted">Sucursal</div><div class="v" id="kSucursal">—</div></div>
       <div class="kpi"><div class="l muted">Usuario</div><div class="v" id="kUsuario">Todos</div></div>
@@ -128,8 +126,7 @@
     const selSucursal=$("sucursal"), selUsuario=$("usuario");
     const btnCargar=$("btnCargar"), btnExportar=$("btnExportar"), estado=$("estado");
     const thead=$("thead"), tbody=$("tbody");
-    const kPartidas=$("kPartidas"), kUnicos=$("kUnicos"), kCantidad=$("kCantidad"), kValor=$("kValor");
-    const kSucursal=$("kSucursal"), kUsuario=$("kUsuario");
+    const kUnicos=$("kUnicos"), kValor=$("kValor"), kSucursal=$("kSucursal"), kUsuario=$("kUsuario");
 
     let datosAgrupa=[], ultimaDescarga=[];
     let costCache=new Map();
@@ -170,19 +167,17 @@
       thead.innerHTML=`
         <tr><th>#</th><th>Código</th><th>Descripción</th>
         <th>Cantidad</th><th>Costo Unit.</th><th>Total (sin IVA)</th></tr>`;
-      let total=0, sumaCant=0;
+      let total=0;
       tbody.innerHTML=rows.map((r,i)=>{
         const cu=Number(costCache.get(r.codigo)??0);
         const tt=cu*Number(r.cantidad||0);
-        total+=tt; sumaCant+=Number(r.cantidad||0);
+        total+=tt;
         return `<tr>
           <td>${i+1}</td><td class="l">${r.codigo}</td><td class="l">${r.descripcion}</td>
           <td>${fmtDec(r.cantidad,3)}</td><td>${fmtMoney(cu)}</td><td>${fmtMoney(tt)}</td>
         </tr>`;
       }).join("");
-      kPartidas.textContent=rows.length;
       kUnicos.textContent=rows.length;
-      kCantidad.textContent=fmtDec(sumaCant,3);
       kValor.textContent=fmtMoney(total);
       ultimaDescarga=rows.map(r=>({codigo:r.codigo, desc:r.descripcion, cantidad:r.cantidad, costo:costCache.get(r.codigo)||0, total:(costCache.get(r.codigo)||0)*r.cantidad}));
     }
